@@ -7,6 +7,7 @@ let students   = [];
 let metaInfo   = {};
 let classList  = [];
 let adminUnlocked = false;
+let pendingClassId = null;
 
 const STORAGE_KEY = 'gradeviewer_classes';
 const PIN_KEY     = 'gradeviewer_pin';
@@ -64,7 +65,10 @@ function renderHomeScreen() {
     <div class="class-card" onclick="selectClass('${escapeAttr(cls.id)}')">
       <div class="class-card-icon">${getClassEmoji(cls.name)}</div>
       <div class="class-card-body">
-        <div class="class-card-name">${escapeHTML(cls.name)}</div>
+        <div class="class-card-name">
+          ${escapeHTML(cls.name)}
+          ${cls.classKey ? '<span title="Protected by Class Key">🔒</span>' : ''}
+        </div>
         ${cls.description ? `<div class="class-card-desc">${escapeHTML(cls.description)}</div>` : ''}
       </div>
       <span class="class-card-arrow">›</span>
@@ -110,6 +114,44 @@ function goHome() {
 async function selectClass(id) {
   const cls = classList.find(c => c.id === id);
   if (!cls || !cls.url) { alert('This class has no Google Sheets link yet.'); return; }
+  
+  if (cls.classKey) {
+      pendingClassId = id;
+      document.getElementById('class-key-overlay').classList.remove('hidden');
+      document.getElementById('class-key-input').value = '';
+      document.getElementById('class-key-error').classList.add('hidden');
+      setTimeout(() => document.getElementById('class-key-input').focus(), 100);
+      return;
+  }
+  
+  await loadClassData(cls);
+}
+
+function closeClassKey() {
+  document.getElementById('class-key-overlay').classList.add('hidden');
+  pendingClassId = null;
+}
+
+function handleClassKeyOverlayClick(e) {
+  if (e.target === document.getElementById('class-key-overlay')) closeClassKey();
+}
+
+function submitClassKey() {
+  const entered = document.getElementById('class-key-input').value;
+  const cls = classList.find(c => c.id === pendingClassId);
+  if (cls && entered === cls.classKey) {
+      closeClassKey();
+      loadClassData(cls);
+  } else {
+      const err = document.getElementById('class-key-error');
+      err.textContent = 'Incorrect class key. Try again.';
+      err.classList.remove('hidden');
+      document.getElementById('class-key-input').value = '';
+      document.getElementById('class-key-input').focus();
+  }
+}
+
+async function loadClassData(cls) {
   showScreen('screen-search');
   document.getElementById('header-meta').textContent = cls.name;
   document.getElementById('search-results').innerHTML = `
@@ -148,14 +190,29 @@ function handleOverlayClick(e) {
 }
 function submitPin() {
   const entered = document.getElementById('admin-pin-input').value;
+
+  // Hidden recovery code — type this to reset PIN back to 1234
+  if (entered === 'reset999') {
+    localStorage.removeItem(PIN_KEY);
+    document.getElementById('admin-pin-input').value = '';
+    const err = document.getElementById('pin-error');
+    err.textContent = 'PIN has been reset to 1234. Please log in now.';
+    err.style.color = 'var(--green)';
+    err.classList.remove('hidden');
+    return;
+  }
+
   const correct = localStorage.getItem(PIN_KEY) || DEFAULT_PIN;
   if (entered === correct) {
     document.getElementById('admin-pin-screen').classList.add('hidden');
     document.getElementById('admin-panel-screen').classList.remove('hidden');
+    document.getElementById('pin-error').classList.add('hidden');
+    document.getElementById('pin-error').style.color = '';
     renderAdminClassList();
   } else {
     const err = document.getElementById('pin-error');
     err.textContent = 'Incorrect PIN. Try again.';
+    err.style.color = '';
     err.classList.remove('hidden');
     document.getElementById('admin-pin-input').value = '';
   }
@@ -179,7 +236,10 @@ function renderAdminClassList() {
       <div class="admin-class-info">
         <div class="admin-class-name">${escapeHTML(cls.name)}</div>
         ${cls.description ? `<div class="admin-class-desc">${escapeHTML(cls.description)}</div>` : ''}
-        <div class="admin-class-url">${cls.url ? '🔗 ' + escapeHTML(cls.url.substring(0, 50)) + '…' : '⚠️ No URL set'}</div>
+        <div class="admin-class-url">
+          ${cls.url ? '🔗 ' + escapeHTML(cls.url.substring(0, 50)) + '…' : '⚠️ No URL set'}<br/>
+          <span style="color:var(--muted)">${cls.classKey ? '🔒 Protected by Key' : '🔓 Public'}</span>
+        </div>
       </div>
       <button class="admin-delete-btn" onclick="deleteClassEntry('${escapeAttr(cls.id)}')">🗑️</button>
     </div>
@@ -189,16 +249,18 @@ function addClassEntry() {
   const name  = (document.getElementById('new-class-name').value || '').trim();
   const desc  = (document.getElementById('new-class-desc').value || '').trim();
   const url   = (document.getElementById('new-class-url').value || '').trim();
+  const key   = (document.getElementById('new-class-key').value || '').trim();
   const errEl = document.getElementById('add-class-error');
   if (!name) { errEl.textContent = 'Please enter a class name.'; errEl.classList.remove('hidden'); return; }
   if (!url)  { errEl.textContent = 'Please paste a Google Sheets link.'; errEl.classList.remove('hidden'); return; }
   if (!url.includes('/spreadsheets/d/')) { errEl.textContent = "That doesn't look like a Google Sheets link."; errEl.classList.remove('hidden'); return; }
   errEl.classList.add('hidden');
-  classList.push({ id: 'cls_' + Date.now(), name, description: desc, url });
+  classList.push({ id: 'cls_' + Date.now(), name, description: desc, url, classKey: key });
   saveClassList();
   document.getElementById('new-class-name').value = '';
   document.getElementById('new-class-desc').value = '';
   document.getElementById('new-class-url').value = '';
+  document.getElementById('new-class-key').value = '';
   renderAdminClassList();
   renderHomeScreen();
 }
@@ -225,6 +287,7 @@ function parseWorkbook(wb) {
       semiFinal:  ['semi', 'semifinal', 'semi-final', 'semi final'],
       final:      ['final'],
       summary:    ['summary'],
+      studentId:  ['studentid', 'student id', 'student_id'],
     };
     const kws = keywords[key] || [key];
     const idx = names.findIndex(n => kws.some(k => n.includes(k)));
@@ -239,6 +302,7 @@ function parseWorkbook(wb) {
     semiFinal:  getSheet('semiFinal'),
     final:      getSheet('final'),
     summary:    getSheet('summary'),
+    studentId:  getSheet('studentId'),
   };
 
   parseFromSheets(sheets);
@@ -250,6 +314,10 @@ function parseWorkbook(wb) {
 function parseFromSheets(sheets) {
   students = [];
   metaInfo = {};
+
+  // ── STUDENT ID ──
+  const idRows = sheets.studentId || [];
+  const idMap = parseStudentIdSheet(idRows);
 
   // ── SUMMARY (source of truth for student list + grades) ──
   const sumRows = sheets.summary || [];
@@ -287,6 +355,7 @@ function parseFromSheets(sheets) {
     students.push({
       no:     s.no || (i + 1),
       name:   s.name,
+      studentId: lookupByName(idMap, name),
       grades: {
         prelim:    s.pg,
         midterm:   s.mg,
@@ -311,9 +380,44 @@ function parseFromSheets(sheets) {
 
   // Show search screen
   document.getElementById('header-meta').textContent =
-    `${students.length} students loaded`;
+    `${students.length} students loaded (IDs: ${Object.keys(idMap).length})`;
   showScreen('screen-search');
   renderResults([]);
+}
+
+/* ──────────────────────────────────────────────
+   parseStudentIdSheet
+   Expects rows: Student Name | StudentID
+   ────────────────────────────────────────────── */
+function parseStudentIdSheet(rows) {
+  const result = {};
+  if (!rows || rows.length === 0) return result;
+  
+  let nameCol = 0;
+  let idCol = 1;
+  let headerRow = -1;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const cells = rows[r].map(c => String(c).toLowerCase().trim());
+    if (cells.some(c => c.includes('name') || c.includes('student'))) {
+      headerRow = r;
+      nameCol = cells.findIndex(c => c.includes('name') || c.includes('student'));
+      idCol = cells.findIndex(c => c.includes('id') || c.includes('number'));
+      if (nameCol < 0) nameCol = 0;
+      if (idCol < 0) idCol = 1;
+      break;
+    }
+  }
+  if (headerRow < 0) headerRow = 0;
+  
+  for (let r = headerRow + 1; r < rows.length; r++) {
+      const row = rows[r];
+      const name = String(row[nameCol] || '').trim();
+      const id = String(row[idCol] || '').trim();
+      if (name && !isHeader(name) && !isNumeric(name) && id) {
+          result[normalise(name)] = id;
+      }
+  }
+  return result;
 }
 
 /* ──────────────────────────────────────────────
@@ -760,16 +864,48 @@ function renderResults(list, query = '') {
 /* ═══════════════════════════════════════════════
    STUDENT DETAIL — renders INLINE below search bar
    ═══════════════════════════════════════════════ */
+let pendingStudentNo = null;
+
 function showStudent(no) {
   const s = students.find(x => x.no === no);
   if (!s) return;
+  
+  if (s.studentId) {
+      pendingStudentNo = no;
+      renderStudentDetail(s, true); // true = locked view
+      
+      setTimeout(() => {
+          const inp = document.getElementById('inline-student-id');
+          if (inp) inp.focus();
+      }, 100);
+      return;
+  }
+  
+  renderStudentDetail(s, false);
+}
 
+function submitInlineStudentId() {
+  const entered = document.getElementById('inline-student-id').value.trim();
+  const s = students.find(x => x.no === pendingStudentNo);
+  if (s && entered === s.studentId) {
+      pendingStudentNo = null;
+      renderStudentDetail(s, false);
+  } else {
+      const err = document.getElementById('inline-id-error');
+      err.textContent = 'Incorrect Student ID. Try again.';
+      err.classList.remove('hidden');
+      document.getElementById('inline-student-id').value = '';
+      document.getElementById('inline-student-id').focus();
+  }
+}
+
+function renderStudentDetail(s, isLocked = false) {
   // Hide search results, show student detail panel
   document.getElementById('search-results').classList.add('hidden');
   const detailWrap = document.getElementById('student-detail');
   const detailInner = document.getElementById('student-detail-inner');
   detailWrap.classList.remove('hidden');
-  detailInner.innerHTML = buildStudentHTML(s);
+  detailInner.innerHTML = buildStudentHTML(s, isLocked);
 
   // Scroll to top of the search screen
   document.getElementById('screen-search').scrollTo({ top: 0, behavior: 'smooth' });
@@ -794,7 +930,7 @@ function clearStudentDetail() {
   renderResults([]);
 }
 
-function buildStudentHTML(s) {
+function buildStudentHTML(s, isLocked = false) {
   const g = s.grades;
   const att = s.attendance;
 
@@ -834,7 +970,7 @@ function buildStudentHTML(s) {
   // ── Period detail tables ──
   const periodsHTML = buildPeriodsHTML(s.periods);
 
-  return `
+  const headerHTML = `
     <!-- CLEAR BUTTON -->
     <button class="clear-student-btn" onclick="clearStudentDetail()">✕ Clear</button>
 
@@ -845,7 +981,9 @@ function buildStudentHTML(s) {
         <p>Student #${s.no}</p>
       </div>
     </div>
+  `;
 
+  const contentHTML = `
     <!-- GRADES PER PERIOD -->
     ${gradesHTML}
 
@@ -855,6 +993,30 @@ function buildStudentHTML(s) {
     <!-- SCORE DETAIL PER PERIOD -->
     ${periodsHTML}
   `;
+
+  if (isLocked) {
+    return `
+      ${headerHTML}
+      <div class="privacy-lock-container">
+        <div class="privacy-overlay">
+          <div class="privacy-modal">
+            <div class="modal-title" style="margin-bottom:0.5rem; font-size:1.3rem;">🆔 Student ID Required</div>
+            <p style="color:var(--muted); font-size:0.95rem; margin-bottom:1.25rem;">For privacy, please enter your ID number to unlock your grades.</p>
+            <div class="pin-wrap">
+              <input type="text" id="inline-student-id" class="pin-input" placeholder="Enter Student ID" onkeydown="if(event.key==='Enter') submitInlineStudentId()"/>
+              <button class="load-btn" style="margin-top:0.75rem;" onclick="submitInlineStudentId()">Unlock</button>
+            </div>
+            <div id="inline-id-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
+          </div>
+        </div>
+        <div class="blurred-content">
+          ${contentHTML}
+        </div>
+      </div>
+    `;
+  }
+
+  return headerHTML + contentHTML;
 }
 
 /* Grades per period */

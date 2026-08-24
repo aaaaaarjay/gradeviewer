@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css?v=2"/>
 </head>
 <body>
 
@@ -95,7 +95,6 @@
           <button class="load-btn" style="margin-top:0.75rem;" onclick="submitPin()">Unlock →</button>
         </div>
         <div id="pin-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
-        <p style="color:var(--muted); font-size:0.75rem; margin-top:1rem; text-align:center;">Default PIN: <strong style="color:var(--accent2)">1234</strong></p>
       </div>
 
       <!-- Admin panel (shown after correct PIN) -->
@@ -111,6 +110,7 @@
           <input type="text" id="new-class-name" class="admin-input" placeholder="Class name (e.g. BSIT 1A — IT101)"/>
           <input type="text" id="new-class-desc" class="admin-input" placeholder="Description (optional, e.g. Instructor: Juan dela Cruz)"/>
           <input type="url" id="new-class-url" class="admin-input" placeholder="Google Sheets link (Anyone with link can view)"/>
+          <input type="text" id="new-class-key" class="admin-input" placeholder="Class Key (optional password for students)"/>
           <button class="load-btn" style="margin-top:0.5rem;" onclick="addClassEntry()">Add Class</button>
           <div id="add-class-error" class="error-msg hidden" style="margin-top:0.5rem;"></div>
         </div>
@@ -138,8 +138,21 @@
     </div>
   </div>
 
+  <!-- ── CLASS KEY MODAL ── -->
+  <div id="class-key-overlay" class="modal-overlay hidden" onclick="handleClassKeyOverlayClick(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">🔒 Class Key Required</div>
+        <button class="modal-close" onclick="closeClassKey()">✕</button>
+      </div>
+      <p style="color:var(--muted); font-size:0.9rem; margin-bottom:1.25rem;">Enter the key provided by your teacher to view this class.</p>
+      <div class="pin-wrap">
+        <input type="password" id="class-key-input" class="pin-input" placeholder="Enter Class Key" onkeydown="if(event.key==='Enter') submitClassKey()"/>
+        <button class="load-btn" style="margin-top:0.75rem;" onclick="submitClassKey()">Unlock →</button>
+      </div>
+      <div id="class-key-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
   <!-- SheetJS for reading Excel -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

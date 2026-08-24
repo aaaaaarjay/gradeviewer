@@ -849,11 +849,47 @@ html, body {
   flex-shrink: 0;
 }
 .admin-delete-btn:hover { background: var(--red-dim); border-color: var(--red); }
-
 @media (max-width: 600px) {
   .home-hero h1 { font-size: 2rem; }
   .home-content { padding: 0 1.25rem 3rem; }
   .class-grid { grid-template-columns: 1fr; }
   .modal-card { padding: 1.5rem 1.25rem; }
+}
+
+/* ─── INLINE PRIVACY LOCK ─── */
+.privacy-lock-container {
+  position: relative;
+  margin-top: 1.5rem;
+}
+.blurred-content {
+  filter: blur(8px);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+  transition: all 0.3s ease;
+}
+.privacy-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 1.5rem;
+}
+.privacy-modal {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(108,99,255,0.2);
+  text-align: center;
+  animation: slideUp 0.3s ease;
+}
+.privacy-modal .pin-input {
+  background: var(--bg);
+  letter-spacing: normal;
 }
 
