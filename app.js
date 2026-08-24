@@ -1041,6 +1041,21 @@ function clearStudentDetail() {
   renderResults([]);
 }
 
+/* Toggle reveal of student access code (admin only) */
+function toggleRevealCode(code) {
+  const btn = document.getElementById('reveal-code-btn');
+  const val = document.getElementById('reveal-code-value');
+  if (!btn || !val) return;
+  if (val.style.display === 'none') {
+    val.textContent = code;
+    val.style.display = 'inline-block';
+    btn.textContent = '🙈 Hide Code';
+  } else {
+    val.style.display = 'none';
+    btn.textContent = '🔑 Show Student Code';
+  }
+}
+
 function buildStudentHTML(s, isLocked = false) {
   const g = s.grades;
   const att = s.attendance;
@@ -1081,9 +1096,25 @@ function buildStudentHTML(s, isLocked = false) {
   // ── Period detail tables ──
   const periodsHTML = buildPeriodsHTML(s.periods);
 
+  // Reveal Code button — only visible when admin is logged in
+  const revealCodeBtn = (adminUnlocked && s.studentId) ? `
+    <div id="reveal-code-wrap" style="margin: 0 0 0.75rem; display:flex; justify-content:flex-end;">
+      <button class="btn-outline" id="reveal-code-btn" style="font-size:0.78rem; padding:0.35rem 0.9rem;"
+        onclick="toggleRevealCode('${escapeAttr(s.studentId)}')">
+        🔑 Show Student Code
+      </button>
+      <span id="reveal-code-value" style="display:none; margin-left:0.75rem; font-family:monospace;
+        font-size:1rem; font-weight:700; color:var(--accent); background:rgba(108,99,255,0.15);
+        padding:0.3rem 0.75rem; border-radius:8px; align-self:center;">
+      </span>
+    </div>
+  ` : '';
+
   const headerHTML = `
     <!-- CLEAR BUTTON -->
     <button class="clear-student-btn" onclick="clearStudentDetail()">✕ Clear</button>
+
+    ${revealCodeBtn}
 
     <div class="student-name-banner">
       <div class="student-big-avatar">${getInitial(s.name)}</div>
