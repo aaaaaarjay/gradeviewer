@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 
 <body>
@@ -109,6 +109,12 @@
           <button class="modal-close" onclick="closeAdmin()">✕</button>
         </div>
 
+        <!-- Firebase sync status -->
+        <div id="firebase-status" class="firebase-status firebase-status--connecting">
+          <span class="firebase-dot"></span>
+          <span id="firebase-status-text">Connecting to cloud…</span>
+        </div>
+
         <!-- Add class form -->
         <div class="admin-add-form">
           <div class="admin-form-title">➕ Add New Class</div>
@@ -144,6 +150,7 @@
           <div id="pin-change-msg" class="hidden" style="font-size:0.8rem; color:var(--green); margin-top:0.4rem;">✅ PIN
             changed!</div>
         </details>
+
       </div>
 
     </div>
@@ -164,9 +171,45 @@
         <button class="load-btn" style="margin-top:0.75rem;" onclick="submitClassKey()">Unlock →</button>
       </div>
       <div id="class-key-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
-      <!-- SheetJS for reading Excel -->
-      <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-      <script src="app.js?v=2"></script>
+    </div>
+  </div>
+
+  <!-- ── TOAST NOTIFICATION ── -->
+  <div id="app-toast" class="app-toast hidden"></div>
+
+  <!-- Firebase SDK (modular, via CDN) -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    // ── PASTE YOUR FIREBASE CONFIG HERE ──
+    // Go to: Firebase Console → Project Settings → Your apps → Web app → Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyA2sqMSiCCSWP9qDp8bAauiO-1HSFsbIIc",
+      authDomain: "grade-viewer-1c4da.firebaseapp.com",
+      projectId: "grade-viewer-1c4da",
+      storageBucket: "grade-viewer-1c4da.firebasestorage.app",
+      messagingSenderId: "533759970810",
+      appId: "1:533759970810:web:5bcdf520a03c574fd52843"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // Expose to global scope so app.js can use it
+    window._firebaseDb          = db;
+    window._firestoreDoc        = doc;
+    window._firestoreGetDoc     = getDoc;
+    window._firestoreSetDoc     = setDoc;
+    window._firestoreOnSnapshot = onSnapshot;
+
+    // Signal that Firebase is ready
+    window.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
+  <!-- SheetJS for reading Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 
 </html>

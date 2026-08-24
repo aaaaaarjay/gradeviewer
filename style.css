@@ -897,3 +897,121 @@ html, body {
   letter-spacing: normal;
 }
 
+/* ─── EXPORT SECTION ─── */
+.export-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+.export-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: rgba(59,130,246,0.1);
+  border: 1px solid rgba(59,130,246,0.25);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.export-info strong { color: var(--text); }
+.export-info code {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+  color: var(--accent2);
+}
+.export-info-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 0.1rem; }
+.export-btn {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  background: linear-gradient(135deg, rgba(59,130,246,0.2), rgba(108,99,255,0.2));
+  border: 1px solid rgba(59,130,246,0.4);
+  border-radius: var(--radius-sm);
+  color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.export-btn:hover {
+  background: linear-gradient(135deg, rgba(59,130,246,0.35), rgba(108,99,255,0.35));
+  border-color: var(--blue);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(59,130,246,0.25);
+}
+.export-btn code {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.88em;
+}
+
+/* ─── EXPORT TOAST → now unified as APP TOAST ─── */
+.app-toast {
+  position: fixed;
+  bottom: 1.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #1a2235, #111827);
+  border: 1px solid rgba(16,185,129,0.4);
+  border-radius: 14px;
+  padding: 0.9rem 1.5rem;
+  font-size: 0.88rem;
+  color: var(--green);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.15);
+  z-index: 9999;
+  max-width: 90vw;
+  text-align: center;
+  animation: toastSlideUp 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─── FIREBASE STATUS BAR ─── */
+.firebase-status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  transition: all 0.3s;
+}
+.firebase-status--connecting {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.25);
+  color: var(--amber);
+}
+.firebase-status--connected {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  color: var(--green);
+}
+.firebase-status--offline {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: var(--red);
+}
+.firebase-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: currentColor;
+}
+.firebase-status--connecting .firebase-dot {
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}

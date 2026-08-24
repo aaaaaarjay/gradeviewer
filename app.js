@@ -9,22 +9,77 @@ let classList  = [];
 let adminUnlocked = false;
 let pendingClassId = null;
 
-const STORAGE_KEY = 'gradeviewer_classes';
-const PIN_KEY     = 'gradeviewer_pin';
-const DEFAULT_PIN = '1234';
+const STORAGE_KEY    = 'gradeviewer_classes';
+const PIN_KEY        = 'gradeviewer_pin';
+const DEFAULT_PIN    = '1234';
+const FIRESTORE_DOC  = 'classes';   // Firestore document name
+const FIRESTORE_COL  = 'gradeviewer'; // Firestore collection name
+
+/* ─── FIREBASE REFERENCES (set when firebase-ready fires) ─── */
+let _db = null;
+
+/* ─── TOAST HELPER ─── */
+function showToast(msg, duration = 3500) {
+  const toast = document.getElementById('app-toast');
+  if (!toast) return;
+  toast.innerHTML = msg;
+  toast.classList.remove('hidden');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.add('hidden'), duration);
+}
+
+/* ─── FIREBASE STATUS UI ─── */
+function setFirebaseStatus(state) {
+  // state: 'connecting' | 'connected' | 'offline'
+  const el   = document.getElementById('firebase-status');
+  const text = document.getElementById('firebase-status-text');
+  if (!el || !text) return;
+  el.className = `firebase-status firebase-status--${state}`;
+  if (state === 'connected') text.textContent = '☁️ Cloud sync active — changes visible everywhere';
+  else if (state === 'offline') text.textContent = '⚠️ Cloud offline — changes saved locally only';
+  else text.textContent = 'Connecting to cloud…';
+}
 
 /* ═══════════════════════════════════════════════
    INIT
    ═══════════════════════════════════════════════ */
 async function initApp() {
-  await loadClassList();
+  // Load classes immediately from local cache / classes.json while Firebase loads
+  await loadClassListFallback();
   renderHomeScreen();
+
+  // Hook into Firebase once SDK is ready
+  window.addEventListener('firebase-ready', async () => {
+    _db = window._firebaseDb;
+    try {
+      await syncFromFirestore();
+      setFirebaseStatus('connected');
+      // Listen for real-time updates
+      const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
+      window._firestoreOnSnapshot(docRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          const firestoreClasses = Array.isArray(data.classes) ? data.classes : [];
+          // Merge: Firestore is source of truth
+          classList = firestoreClasses;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(classList));
+          renderHomeScreen();
+          renderAdminClassList();
+        }
+      });
+    } catch (e) {
+      console.warn('Firebase unavailable, using fallback.', e);
+      setFirebaseStatus('offline');
+    }
+  });
 }
 
 /* ═══════════════════════════════════════════════
-   CLASS LIST — classes.json + localStorage
+   CLASS LIST — Firestore (primary) + classes.json + localStorage (fallback)
    ═══════════════════════════════════════════════ */
-async function loadClassList() {
+
+/* Load from classes.json + localStorage as fast initial load */
+async function loadClassListFallback() {
   let jsonClasses = [];
   try {
     const resp = await fetch('classes.json?v=' + Date.now());
@@ -45,8 +100,33 @@ async function loadClassList() {
   classList = combined;
 }
 
-function saveClassList() {
+/* Read from Firestore and update local state */
+async function syncFromFirestore() {
+  if (!_db) return;
+  const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
+  const snap   = await window._firestoreGetDoc(docRef);
+  if (snap.exists()) {
+    const data = snap.data();
+    const firestoreClasses = Array.isArray(data.classes) ? data.classes : [];
+    classList = firestoreClasses;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(classList));
+    renderHomeScreen();
+  }
+}
+
+/* Save entire classList to Firestore + localStorage */
+async function saveClassList() {
+  // Always save locally as cache
   localStorage.setItem(STORAGE_KEY, JSON.stringify(classList));
+  // Save to Firestore if available
+  if (!_db) return;
+  try {
+    const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
+    await window._firestoreSetDoc(docRef, { classes: classList });
+  } catch (e) {
+    console.warn('Firestore save failed, local only.', e);
+    showToast('⚠️ Cloud save failed. Changes saved locally only.');
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -256,7 +336,9 @@ function addClassEntry() {
   if (!url.includes('/spreadsheets/d/')) { errEl.textContent = "That doesn't look like a Google Sheets link."; errEl.classList.remove('hidden'); return; }
   errEl.classList.add('hidden');
   classList.push({ id: 'cls_' + Date.now(), name, description: desc, url, classKey: key });
-  saveClassList();
+  saveClassList().then(() => {
+    showToast('✅ Class added and synced to cloud!');
+  });
   document.getElementById('new-class-name').value = '';
   document.getElementById('new-class-desc').value = '';
   document.getElementById('new-class-url').value = '';
@@ -267,9 +349,28 @@ function addClassEntry() {
 function deleteClassEntry(id) {
   if (!confirm("Delete this class? Students won't be able to access it anymore.")) return;
   classList = classList.filter(c => c.id !== id);
-  saveClassList();
+  saveClassList().then(() => {
+    showToast('🗑️ Class deleted and synced to cloud.');
+  });
   renderAdminClassList();
   renderHomeScreen();
+}
+
+/* ═══════════════════════════════════════════════
+   EXPORT classes.json (backup / migration use)
+   ═══════════════════════════════════════════════ */
+function exportClassesJson() {
+  const exportData = classList.map(({ id, name, description, url, classKey }) => ({
+    id, name, description, url, classKey
+  }));
+  const json = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'classes.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('📥 classes.json downloaded!');
 }
 function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
 /* ═══════════════════════════════════════════════
