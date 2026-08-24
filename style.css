@@ -676,8 +676,8 @@ html, body {
 }
 .class-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
   margin-top: 1rem;
 }
 .class-card {
@@ -714,17 +714,15 @@ html, body {
   font-weight: 700;
   font-size: 1rem;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 .class-card-desc {
   font-size: 0.8rem;
   color: var(--muted);
   margin-top: 0.2rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
 }
 .class-card-arrow {
   color: var(--muted);
