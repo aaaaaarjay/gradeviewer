@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Grade Viewer — Class Record System</title>
+  <meta name="description" content="Search and view student grades, attendance, and scores from your class record."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+  <!-- ── HOME SCREEN ── -->
+  <div id="screen-home" class="screen active">
+    <div class="upload-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <header class="search-header">
+      <div class="header-brand">
+        <span>🎓</span>
+        <span>Grade Viewer</span>
+      </div>
+      <button class="btn-outline" id="btn-admin" onclick="openAdmin()">⚙️ Manage Classes</button>
+    </header>
+
+    <div class="home-hero">
+      <h1>Your Grades, Instantly</h1>
+      <p>Select your class below to view your grades and attendance.</p>
+    </div>
+
+    <div class="home-content">
+      <div id="class-grid" class="class-grid">
+        <!-- class cards rendered here by JS -->
+      </div>
+      <div id="home-empty" class="home-empty hidden">
+        <div class="emoji">📭</div>
+        <div>No classes added yet.</div>
+        <div style="font-size:0.85rem; margin-top:0.5rem; color:var(--muted)">Click ⚙️ Manage Classes to add one.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SEARCH SCREEN ── -->
+  <div id="screen-search" class="screen">
+    <div class="search-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+    </div>
+
+    <header class="search-header">
+      <div class="header-brand" onclick="goHome()" style="cursor:pointer;">
+        <span>🎓</span>
+        <span>Grade Viewer</span>
+      </div>
+      <div class="header-meta" id="header-meta"></div>
+      <button class="btn-outline" onclick="goHome()">← All Classes</button>
+    </header>
+
+    <!-- Search bar -->
+    <div class="search-hero">
+      <h2>Find a Student</h2>
+      <p>Type a name to view their grades, attendance, and scores</p>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Search student name…" oninput="onSearch()" autocomplete="off"/>
+        <button class="clear-btn" id="clear-btn" onclick="clearSearch()" aria-label="Clear search">✕</button>
+      </div>
+    </div>
+
+    <div id="search-results" class="search-results"></div>
+
+    <div id="student-detail" class="student-detail hidden">
+      <div class="student-detail-inner" id="student-detail-inner"></div>
+    </div>
+  </div>
+
+  <!-- ── ADMIN MODAL ── -->
+  <div id="admin-overlay" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
+    <div class="modal-card" id="admin-modal">
+
+      <!-- PIN screen -->
+      <div id="admin-pin-screen">
+        <div class="modal-header">
+          <div class="modal-title">⚙️ Admin Access</div>
+          <button class="modal-close" onclick="closeAdmin()">✕</button>
+        </div>
+        <p style="color:var(--muted); font-size:0.9rem; margin-bottom:1.25rem;">Enter your admin PIN to manage classes.</p>
+        <div class="pin-wrap">
+          <input type="password" id="admin-pin-input" class="pin-input" placeholder="Enter PIN" maxlength="8" onkeydown="if(event.key==='Enter') submitPin()"/>
+          <button class="load-btn" style="margin-top:0.75rem;" onclick="submitPin()">Unlock →</button>
+        </div>
+        <div id="pin-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
+        <p style="color:var(--muted); font-size:0.75rem; margin-top:1rem; text-align:center;">Default PIN: <strong style="color:var(--accent2)">1234</strong></p>
+      </div>
+
+      <!-- Admin panel (shown after correct PIN) -->
+      <div id="admin-panel-screen" class="hidden">
+        <div class="modal-header">
+          <div class="modal-title">⚙️ Manage Classes</div>
+          <button class="modal-close" onclick="closeAdmin()">✕</button>
+        </div>
+
+        <!-- Add class form -->
+        <div class="admin-add-form">
+          <div class="admin-form-title">➕ Add New Class</div>
+          <input type="text" id="new-class-name" class="admin-input" placeholder="Class name (e.g. BSIT 1A — IT101)"/>
+          <input type="text" id="new-class-desc" class="admin-input" placeholder="Description (optional, e.g. Instructor: Juan dela Cruz)"/>
+          <input type="url" id="new-class-url" class="admin-input" placeholder="Google Sheets link (Anyone with link can view)"/>
+          <button class="load-btn" style="margin-top:0.5rem;" onclick="addClassEntry()">Add Class</button>
+          <div id="add-class-error" class="error-msg hidden" style="margin-top:0.5rem;"></div>
+        </div>
+
+        <div class="admin-divider"></div>
+
+        <!-- Saved classes list -->
+        <div class="admin-form-title">📋 Saved Classes</div>
+        <div id="admin-class-list" class="admin-class-list">
+          <!-- rendered by JS -->
+        </div>
+
+        <div class="admin-divider"></div>
+        <!-- Change PIN -->
+        <details style="margin-top:0.5rem;">
+          <summary style="cursor:pointer; color:var(--muted); font-size:0.82rem; font-weight:600;">🔑 Change PIN</summary>
+          <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <input type="password" id="new-pin-input" class="admin-input" style="flex:1; min-width:120px;" placeholder="New PIN"/>
+            <button class="btn-outline" onclick="changePin()">Save PIN</button>
+          </div>
+          <div id="pin-change-msg" class="hidden" style="font-size:0.8rem; color:var(--green); margin-top:0.4rem;">✅ PIN changed!</div>
+        </details>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SheetJS for reading Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
