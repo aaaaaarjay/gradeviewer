@@ -177,13 +177,12 @@
   <!-- ── TOAST NOTIFICATION ── -->
   <div id="app-toast" class="app-toast hidden"></div>
 
-  <!-- Firebase SDK (modular, via CDN) -->
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  <!-- Firebase SDK (Standard scripts for local file:// usage) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
+  <script>
     // ── PASTE YOUR FIREBASE CONFIG HERE ──
-    // Go to: Firebase Console → Project Settings → Your apps → Web app → Config
     const firebaseConfig = {
       apiKey: "AIzaSyCOddhoStINDV88cGGTatEXSIOz2foex-4",
       authDomain: "gradeviewer-online.firebaseapp.com",
@@ -193,15 +192,15 @@
       appId: "1:926273082901:web:214b7d4e59344acce5e01c"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
-    // Expose to global scope so app.js can use it
-    window._firebaseDb          = db;
-    window._firestoreDoc        = doc;
-    window._firestoreGetDoc     = getDoc;
-    window._firestoreSetDoc     = setDoc;
-    window._firestoreOnSnapshot = onSnapshot;
+    // Expose to global scope for app.js
+    window._firebaseDb = db;
+    window._firestoreDoc = (db, col, docId) => db.collection(col).doc(docId);
+    window._firestoreGetDoc = (ref) => ref.get();
+    window._firestoreSetDoc = (ref, data) => ref.set(data);
+    window._firestoreOnSnapshot = (ref, callback) => ref.onSnapshot(callback);
 
     // Signal that Firebase is ready
     window.dispatchEvent(new Event('firebase-ready'));
