@@ -327,13 +327,18 @@ function changePin() {
   document.getElementById('new-pin-input').value = '';
   setTimeout(() => document.getElementById('pin-change-msg').classList.add('hidden'), 2500);
 }
-function renderAdminClassList() {
+function renderAdminClassList(showAll = false) {
   const container = document.getElementById('admin-class-list');
   if (!classList.length) {
     container.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:1rem;">No classes saved yet.</div>';
     return;
   }
-  container.innerHTML = classList.map(cls => `
+
+  const LIMIT = 2;
+  const visible = showAll ? classList : classList.slice(0, LIMIT);
+  const hasMore = classList.length > LIMIT;
+
+  const rowsHTML = visible.map(cls => `
     <div class="admin-class-row">
       <div class="admin-class-info">
         <div class="admin-class-name">${escapeHTML(cls.name)}</div>
@@ -346,6 +351,15 @@ function renderAdminClassList() {
       <button class="admin-delete-btn" onclick="deleteClassEntry('${escapeAttr(cls.id)}')">🗑️</button>
     </div>
   `).join('');
+
+  const toggleBtn = hasMore ? `
+    <button class="btn-outline" style="width:100%; margin-top:0.6rem; font-size:0.8rem;"
+      onclick="renderAdminClassList(${!showAll})">
+      ${showAll ? '▲ Show Less' : `▼ Show All (${classList.length})`}
+    </button>
+  ` : '';
+
+  container.innerHTML = rowsHTML + toggleBtn;
 }
 function addClassEntry() {
   const name = (document.getElementById('new-class-name').value || '').trim();
