@@ -118,7 +118,7 @@
           <input type="url" id="new-class-url" class="admin-input"
             placeholder="Google Sheets link (Anyone with link can view)" />
           <input type="text" id="new-class-key" class="admin-input"
-            placeholder="Class Key (optional password for students)" />
+            placeholder="Section Code (optional password for students)" />
           <button class="load-btn" style="margin-top:0.5rem;" onclick="addClassEntry()">Add Class</button>
           <div id="add-class-error" class="error-msg hidden" style="margin-top:0.5rem;"></div>
         </div>
@@ -153,13 +153,13 @@
   <div id="class-key-overlay" class="modal-overlay hidden" onclick="handleClassKeyOverlayClick(event)">
     <div class="modal-card">
       <div class="modal-header">
-        <div class="modal-title">🔒 Class Key Required</div>
+        <div class="modal-title">Section Code Required</div>
         <button class="modal-close" onclick="closeClassKey()">✕</button>
       </div>
       <p style="color:var(--muted); font-size:0.9rem; margin-bottom:1.25rem;">Enter the key provided by your teacher to
         view this class.</p>
       <div class="pin-wrap">
-        <input type="password" id="class-key-input" class="pin-input" placeholder="Enter Class Key"
+        <input type="password" id="class-key-input" class="pin-input" placeholder="Enter Section Code"
           onkeydown="if(event.key==='Enter') submitClassKey()" />
         <button class="load-btn" style="margin-top:0.75rem;" onclick="submitClassKey()">Unlock →</button>
       </div>
