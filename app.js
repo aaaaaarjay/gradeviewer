@@ -1393,5 +1393,26 @@ function highlightMatch(text, query) {
 function showError(msg) { console.warn('GradeViewer:', msg); }
 function clearError() {}
 
+// Expose UI functions to global window object for HTML onclick handlers
+window.initApp = initApp;
+window.selectClass = selectClass;
+window.goHome = goHome;
+window.onSearch = onSearch;
+window.clearSearch = clearSearch;
+window.showStudent = showStudent;
+window.closeStudentId = closeStudentId;
+window.submitInlineStudentId = submitInlineStudentId;
+window.clearStudentDetail = clearStudentDetail;
+window.openAdmin = openAdmin;
+window.closeAdmin = closeAdmin;
+window.handleOverlayClick = handleOverlayClick;
+window.submitPin = submitPin;
+window.changePin = changePin;
+window.addClassEntry = addClassEntry;
+window.deleteClassEntry = deleteClassEntry;
+window.closeClassKey = closeClassKey;
+window.handleClassKeyOverlayClick = handleClassKeyOverlayClick;
+window.submitClassKey = submitClassKey;
+
 // Boot the app
 initApp();
