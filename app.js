@@ -8,6 +8,8 @@ let metaInfo = {};
 let classList = [];
 let adminUnlocked = false;
 let pendingClassId = null;
+let bypassSectionCode = false;
+let bypassStudentId   = false;
 
 const STORAGE_KEY = 'gradeviewer_classes';
 const PIN_KEY = 'gradeviewer_pin';
@@ -206,7 +208,7 @@ async function selectClass(id) {
   const cls = classList.find(c => c.id === id);
   if (!cls || !cls.url) { alert('This class has no Google Sheets link yet.'); return; }
 
-  if (cls.classKey) {
+  if (cls.classKey && !bypassSectionCode) {
     pendingClassId = id;
     document.getElementById('class-key-overlay').classList.remove('hidden');
     document.getElementById('class-key-input').value = '';
@@ -266,6 +268,15 @@ async function loadClassData(cls) {
 /* ═══════════════════════════════════════════════
    ADMIN PANEL
    ═══════════════════════════════════════════════ */
+function toggleBypassSection(enabled) {
+  bypassSectionCode = enabled;
+  showToast(enabled ? '🔓 Section Code bypassed — classes will open directly.' : '🔒 Section Code re-enabled.');
+}
+function toggleBypassStudentId(enabled) {
+  bypassStudentId = enabled;
+  showToast(enabled ? '🔓 Student ID bypassed — grades visible without entering ID.' : '🔒 Student ID required again.');
+}
+
 function openAdmin() {
   adminUnlocked = false;
   document.getElementById('admin-pin-screen').classList.remove('hidden');
@@ -981,7 +992,7 @@ function showStudent(no) {
   const s = students.find(x => x.no === no);
   if (!s) return;
 
-  if (s.studentId) {
+  if (s.studentId && !bypassStudentId) {
     pendingStudentNo = no;
     renderStudentDetail(s, true); // true = locked view
 
