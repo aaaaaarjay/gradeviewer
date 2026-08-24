@@ -48,8 +48,7 @@ async function initApp() {
   await loadClassListFallback();
   renderHomeScreen();
 
-  // Hook into Firebase once SDK is ready
-  window.addEventListener('firebase-ready', async () => {
+  const setupFirebase = async () => {
     _db = window._firebaseDb;
     try {
       await syncFromFirestore();
@@ -57,21 +56,32 @@ async function initApp() {
       // Listen for real-time updates
       const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
       window._firestoreOnSnapshot(docRef, (snap) => {
-        if (snap.exists()) {
+        // Use snap.exists (boolean) for v8 compat, fallback to snap.exists() for v9
+        const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
+        if (exists) {
           const data = snap.data();
           const firestoreClasses = Array.isArray(data.classes) ? data.classes : [];
           // Merge: Firestore is source of truth
           classList = firestoreClasses;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(classList));
           renderHomeScreen();
-          renderAdminClassList();
+          
+          if (!document.getElementById('admin-panel-screen').classList.contains('hidden')) {
+              renderAdminClassList();
+          }
         }
       });
     } catch (e) {
       console.warn('Firebase unavailable, using fallback.', e);
       setFirebaseStatus('offline');
     }
-  });
+  };
+
+  if (window._firebaseDb) {
+    setupFirebase();
+  } else {
+    window.addEventListener('firebase-ready', setupFirebase);
+  }
 }
 
 /* ═══════════════════════════════════════════════
@@ -105,7 +115,8 @@ async function syncFromFirestore() {
   if (!_db) return;
   const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
   const snap   = await window._firestoreGetDoc(docRef);
-  if (snap.exists()) {
+  const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
+  if (exists) {
     const data = snap.data();
     const firestoreClasses = Array.isArray(data.classes) ? data.classes : [];
     classList = firestoreClasses;
