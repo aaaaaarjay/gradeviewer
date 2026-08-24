@@ -3,17 +3,17 @@
    ═══════════════════════════════════════════════ */
 
 /* ─── STATE ─── */
-let students   = [];
-let metaInfo   = {};
-let classList  = [];
+let students = [];
+let metaInfo = {};
+let classList = [];
 let adminUnlocked = false;
 let pendingClassId = null;
 
-const STORAGE_KEY    = 'gradeviewer_classes';
-const PIN_KEY        = 'gradeviewer_pin';
-const DEFAULT_PIN    = '1234';
-const FIRESTORE_DOC  = 'classes';   // Firestore document name
-const FIRESTORE_COL  = 'gradeviewer'; // Firestore collection name
+const STORAGE_KEY = 'gradeviewer_classes';
+const PIN_KEY = 'gradeviewer_pin';
+const DEFAULT_PIN = '1234';
+const FIRESTORE_DOC = 'classes';   // Firestore document name
+const FIRESTORE_COL = 'gradeviewer'; // Firestore collection name
 
 /* ─── FIREBASE REFERENCES (set when firebase-ready fires) ─── */
 let _db = null;
@@ -31,7 +31,7 @@ function showToast(msg, duration = 3500) {
 /* ─── FIREBASE STATUS UI ─── */
 function setFirebaseStatus(state) {
   // state: 'connecting' | 'connected' | 'offline'
-  const el   = document.getElementById('firebase-status');
+  const el = document.getElementById('firebase-status');
   const text = document.getElementById('firebase-status-text');
   if (!el || !text) return;
   el.className = `firebase-status firebase-status--${state}`;
@@ -65,9 +65,9 @@ async function initApp() {
           classList = firestoreClasses;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(classList));
           renderHomeScreen();
-          
+
           if (!document.getElementById('admin-panel-screen').classList.contains('hidden')) {
-              renderAdminClassList();
+            renderAdminClassList();
           }
         }
       });
@@ -97,12 +97,12 @@ async function loadClassListFallback() {
       const data = await resp.json();
       jsonClasses = (Array.isArray(data) ? data : []).filter(c => c.url);
     }
-  } catch (_) {}
+  } catch (_) { }
   let localClasses = [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) localClasses = JSON.parse(raw);
-  } catch (_) {}
+  } catch (_) { }
   const combined = [...jsonClasses];
   for (const lc of localClasses) {
     if (!combined.find(c => c.id === lc.id)) combined.push(lc);
@@ -114,7 +114,7 @@ async function loadClassListFallback() {
 async function syncFromFirestore() {
   if (!_db) return;
   const docRef = window._firestoreDoc(_db, FIRESTORE_COL, FIRESTORE_DOC);
-  const snap   = await window._firestoreGetDoc(docRef);
+  const snap = await window._firestoreGetDoc(docRef);
   const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
   if (exists) {
     const data = snap.data();
@@ -144,7 +144,7 @@ async function saveClassList() {
    HOME SCREEN
    ═══════════════════════════════════════════════ */
 function renderHomeScreen() {
-  const grid  = document.getElementById('class-grid');
+  const grid = document.getElementById('class-grid');
   const empty = document.getElementById('home-empty');
   if (!classList.length) {
     grid.innerHTML = '';
@@ -205,16 +205,16 @@ function goHome() {
 async function selectClass(id) {
   const cls = classList.find(c => c.id === id);
   if (!cls || !cls.url) { alert('This class has no Google Sheets link yet.'); return; }
-  
+
   if (cls.classKey) {
-      pendingClassId = id;
-      document.getElementById('class-key-overlay').classList.remove('hidden');
-      document.getElementById('class-key-input').value = '';
-      document.getElementById('class-key-error').classList.add('hidden');
-      setTimeout(() => document.getElementById('class-key-input').focus(), 100);
-      return;
+    pendingClassId = id;
+    document.getElementById('class-key-overlay').classList.remove('hidden');
+    document.getElementById('class-key-input').value = '';
+    document.getElementById('class-key-error').classList.add('hidden');
+    setTimeout(() => document.getElementById('class-key-input').focus(), 100);
+    return;
   }
-  
+
   await loadClassData(cls);
 }
 
@@ -231,14 +231,14 @@ function submitClassKey() {
   const entered = document.getElementById('class-key-input').value;
   const cls = classList.find(c => c.id === pendingClassId);
   if (cls && entered === cls.classKey) {
-      closeClassKey();
-      loadClassData(cls);
+    closeClassKey();
+    loadClassData(cls);
   } else {
-      const err = document.getElementById('class-key-error');
-      err.textContent = 'Incorrect class key. Try again.';
-      err.classList.remove('hidden');
-      document.getElementById('class-key-input').value = '';
-      document.getElementById('class-key-input').focus();
+    const err = document.getElementById('class-key-error');
+    err.textContent = 'Incorrect class key. Try again.';
+    err.classList.remove('hidden');
+    document.getElementById('class-key-input').value = '';
+    document.getElementById('class-key-input').focus();
   }
 }
 
@@ -258,7 +258,7 @@ async function loadClassData(cls) {
     const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true });
     parseWorkbook(wb);
     renderResults([], '');
-  } catch(err) {
+  } catch (err) {
     document.getElementById('search-results').innerHTML = `<div class="no-results"><div class="emoji">❌</div><div>${escapeHTML(err.message)}</div></div>`;
   }
 }
@@ -337,13 +337,13 @@ function renderAdminClassList() {
   `).join('');
 }
 function addClassEntry() {
-  const name  = (document.getElementById('new-class-name').value || '').trim();
-  const desc  = (document.getElementById('new-class-desc').value || '').trim();
-  const url   = (document.getElementById('new-class-url').value || '').trim();
-  const key   = (document.getElementById('new-class-key').value || '').trim();
+  const name = (document.getElementById('new-class-name').value || '').trim();
+  const desc = (document.getElementById('new-class-desc').value || '').trim();
+  const url = (document.getElementById('new-class-url').value || '').trim();
+  const key = (document.getElementById('new-class-key').value || '').trim();
   const errEl = document.getElementById('add-class-error');
   if (!name) { errEl.textContent = 'Please enter a class name.'; errEl.classList.remove('hidden'); return; }
-  if (!url)  { errEl.textContent = 'Please paste a Google Sheets link.'; errEl.classList.remove('hidden'); return; }
+  if (!url) { errEl.textContent = 'Please paste a Google Sheets link.'; errEl.classList.remove('hidden'); return; }
   if (!url.includes('/spreadsheets/d/')) { errEl.textContent = "That doesn't look like a Google Sheets link."; errEl.classList.remove('hidden'); return; }
   errEl.classList.add('hidden');
   classList.push({ id: 'cls_' + Date.now(), name, description: desc, url, classKey: key });
@@ -394,12 +394,12 @@ function parseWorkbook(wb) {
     // Try exact or fuzzy match
     const keywords = {
       attendance: ['attendance'],
-      prelim:     ['prelim'],
-      midterm:    ['midterm', 'mid'],
-      semiFinal:  ['semi', 'semifinal', 'semi-final', 'semi final'],
-      final:      ['final'],
-      summary:    ['summary'],
-      studentId:  ['studentid', 'student id', 'student_id'],
+      prelim: ['prelim'],
+      midterm: ['midterm', 'mid'],
+      semiFinal: ['semi', 'semifinal', 'semi-final', 'semi final'],
+      final: ['final'],
+      summary: ['summary'],
+      studentId: ['studentid', 'student id', 'student_id'],
     };
     const kws = keywords[key] || [key];
     const idx = names.findIndex(n => kws.some(k => n.includes(k)));
@@ -409,12 +409,12 @@ function parseWorkbook(wb) {
 
   const sheets = {
     attendance: getSheet('attendance'),
-    prelim:     getSheet('prelim'),
-    midterm:    getSheet('midterm'),
-    semiFinal:  getSheet('semiFinal'),
-    final:      getSheet('final'),
-    summary:    getSheet('summary'),
-    studentId:  getSheet('studentId'),
+    prelim: getSheet('prelim'),
+    midterm: getSheet('midterm'),
+    semiFinal: getSheet('semiFinal'),
+    final: getSheet('final'),
+    summary: getSheet('summary'),
+    studentId: getSheet('studentId'),
   };
 
   parseFromSheets(sheets);
@@ -441,46 +441,46 @@ function parseFromSheets(sheets) {
 
   // ── PRELIM ──
   const prelimRows = sheets.prelim || [];
-  const prelimMap  = parsePeriodSheet(prelimRows, 'PRELIM');
+  const prelimMap = parsePeriodSheet(prelimRows, 'PRELIM');
 
   // ── MIDTERM ──
   const midtermRows = sheets.midterm || [];
-  const midtermMap  = parsePeriodSheet(midtermRows, 'MIDTERM');
+  const midtermMap = parsePeriodSheet(midtermRows, 'MIDTERM');
 
   // ── SEMI FINAL ──
   const sfRows = sheets.semiFinal || [];
-  const sfMap  = sfRows.length > 5 ? parsePeriodSheet(sfRows, 'SEMIFINAL') : {};
+  const sfMap = sfRows.length > 5 ? parsePeriodSheet(sfRows, 'SEMIFINAL') : {};
 
   // ── FINAL ──
   const finalRows = sheets.final || [];
-  const finalMap  = finalRows.length > 5 ? parsePeriodSheet(finalRows, 'FINAL') : {};
+  const finalMap = finalRows.length > 5 ? parsePeriodSheet(finalRows, 'FINAL') : {};
 
   // ── MERGE ──
   summaryStudents.forEach((s, i) => {
     const name = normalise(s.name);
-    const att  = lookupByName(attendanceMap, name) || {};
-    const pre  = lookupByName(prelimMap, name) || {};
-    const mid  = lookupByName(midtermMap, name) || {};
-    const sf   = lookupByName(sfMap, name) || {};
-    const fin  = lookupByName(finalMap, name) || {};
+    const att = lookupByName(attendanceMap, name) || {};
+    const pre = lookupByName(prelimMap, name) || {};
+    const mid = lookupByName(midtermMap, name) || {};
+    const sf = lookupByName(sfMap, name) || {};
+    const fin = lookupByName(finalMap, name) || {};
 
     students.push({
-      no:     s.no || (i + 1),
-      name:   s.name,
+      no: s.no || (i + 1),
+      name: s.name,
       studentId: lookupByName(idMap, name),
       grades: {
-        prelim:    s.pg,
-        midterm:   s.mg,
+        prelim: s.pg,
+        midterm: s.mg,
         semiFinal: s.se,
-        final:     s.fg,
-        remarks:   s.remarks,
+        final: s.fg,
+        remarks: s.remarks,
       },
       attendance: att,
       periods: {
-        prelim:    pre,
-        midterm:   mid,
+        prelim: pre,
+        midterm: mid,
         semiFinal: Object.keys(sf).length > 0 ? sf : null,
-        final:     Object.keys(fin).length > 0 ? fin : null,
+        final: Object.keys(fin).length > 0 ? fin : null,
       },
     });
   });
@@ -504,7 +504,7 @@ function parseFromSheets(sheets) {
 function parseStudentIdSheet(rows) {
   const result = {};
   if (!rows || rows.length === 0) return result;
-  
+
   let nameCol = 0;
   let idCol = 1;
   let headerRow = -1;
@@ -520,14 +520,14 @@ function parseStudentIdSheet(rows) {
     }
   }
   if (headerRow < 0) headerRow = 0;
-  
+
   for (let r = headerRow + 1; r < rows.length; r++) {
-      const row = rows[r];
-      const name = String(row[nameCol] || '').trim();
-      const id = String(row[idCol] || '').trim();
-      if (name && !isHeader(name) && !isNumeric(name) && id) {
-          result[normalise(name)] = id;
-      }
+    const row = rows[r];
+    const name = String(row[nameCol] || '').trim();
+    const id = String(row[idCol] || '').trim();
+    if (name && !isHeader(name) && !isNumeric(name) && id) {
+      result[normalise(name)] = id;
+    }
   }
   return result;
 }
@@ -550,7 +550,7 @@ function parseSummarySheet(rows) {
   if (headerRow < 0) headerRow = 5; // fallback
 
   const header = rows[headerRow].map(c => String(c).toLowerCase().trim());
-  const colNo  = header.findIndex(h => h === 'no' || h === '#' || h === 'no.');
+  const colNo = header.findIndex(h => h === 'no' || h === '#' || h === 'no.');
   const colName = header.findIndex(h => h.includes('name'));
   // Grade columns — look for PG, MG, SE / SF, FG / F
   function findCol(keywords) {
@@ -568,12 +568,12 @@ function parseSummarySheet(rows) {
     if (!name || name.toLowerCase() === 'student\'s name' || name.toLowerCase() === 'name') continue;
     if (isNumeric(name)) continue;
     result.push({
-      no:      colNo >= 0 ? toNum(row[colNo]) : r - headerRow,
+      no: colNo >= 0 ? toNum(row[colNo]) : r - headerRow,
       name,
-      pg:      colPG >= 0 ? toNum(row[colPG]) : null,
-      mg:      colMG >= 0 ? toNum(row[colMG]) : null,
-      se:      colSE >= 0 ? toNum(row[colSE]) : null,
-      fg:      colFG >= 0 ? toNum(row[colFG]) : null,
+      pg: colPG >= 0 ? toNum(row[colPG]) : null,
+      mg: colMG >= 0 ? toNum(row[colMG]) : null,
+      se: colSE >= 0 ? toNum(row[colSE]) : null,
+      fg: colFG >= 0 ? toNum(row[colFG]) : null,
       remarks: colRem >= 0 ? String(row[colRem] || '').trim() : '',
     });
   }
@@ -603,7 +603,7 @@ function parseAttendanceSheet(rows) {
   // Scan for 'total' cells in the rows near the section row
   let totalCols = {}; // { prelim: colIdx, midterm: colIdx, ... }
   let nameCol = 1; // usually column B
-  let noCol   = 0;
+  let noCol = 0;
 
   // Scan a few rows to find column layout
   // The header row for days is usually right below sectionRow
@@ -634,7 +634,7 @@ function parseAttendanceSheet(rows) {
   if (dataStart < 0) return {};
 
   const map = {};
-  const periodsList = Object.entries(totalCols).sort((a,b)=>a[1]-b[1]).map(e=>e[0]);
+  const periodsList = Object.entries(totalCols).sort((a, b) => a[1] - b[1]).map(e => e[0]);
 
   for (let r = dataStart; r < rows.length; r++) {
     const row = rows[r];
@@ -651,8 +651,8 @@ function parseAttendanceSheet(rows) {
       for (let ci = prevCol + 1; ci < myCol; ci++) {
         let dateStr = '';
         for (let r = dataStart - 1; r > sectionRow; r--) {
-            dateStr = String(rows[r]?.[ci] || '').trim();
-            if (dateStr) break;
+          dateStr = String(rows[r]?.[ci] || '').trim();
+          if (dateStr) break;
         }
 
         if (dateStr && isNaN(parseFloat(dateStr))) {
@@ -664,8 +664,8 @@ function parseAttendanceSheet(rows) {
         }
       }
 
-      att[period] = { 
-        present: toNum(row[col]), 
+      att[period] = {
+        present: toNum(row[col]),
         total: records.length,
         records: records
       };
@@ -682,9 +682,9 @@ function detectPeriodFromRow(rows, r, ci, sectionRow) {
   let lastPeriod = null;
   for (let c = 0; c <= ci; c++) {
     const v = String(sr[c] || '').toLowerCase().trim();
-    if (v.includes('prelim'))    lastPeriod = 'prelim';
+    if (v.includes('prelim')) lastPeriod = 'prelim';
     else if (v.includes('midterm') || v.includes('mid')) lastPeriod = 'midterm';
-    else if (v.includes('semi'))  lastPeriod = 'semiFinal';
+    else if (v.includes('semi')) lastPeriod = 'semiFinal';
     else if (v.includes('final')) lastPeriod = 'final';
   }
   return lastPeriod;
@@ -694,10 +694,10 @@ function detectPeriodFromRow(rows, r, ci, sectionRow) {
 function countTotalDays(rows, sectionRow, dataStart, period, totalCols) {
   // We count by looking at the header row for day numbers/dates under the period
   // Simplification: count non-empty values in the first data row up to the total column
-  const periods = Object.entries(totalCols).sort((a,b)=>a[1]-b[1]).map(e=>e[0]);
-  const myIdx   = periods.indexOf(period);
+  const periods = Object.entries(totalCols).sort((a, b) => a[1] - b[1]).map(e => e[0]);
+  const myIdx = periods.indexOf(period);
   const prevCol = myIdx > 0 ? totalCols[periods[myIdx - 1]] : 1; // start after name col
-  const myCol   = totalCols[period];
+  const myCol = totalCols[period];
   // Count day columns between prevCol+1 and myCol-1
   // Look at the header row (sectionRow+1 or sectionRow+2) for numbers/dates
   let count = 0;
@@ -724,7 +724,7 @@ function parsePeriodSheet(rows, periodLabel) {
 
   // Find row with "Student's Name"
   let nameCol = 1;
-  let noCol   = 0;
+  let noCol = 0;
   let headerRow = -1;
   for (let r = 0; r < Math.min(rows.length, 15); r++) {
     const cells = rows[r].map(c => String(c).toLowerCase().trim());
@@ -732,7 +732,7 @@ function parsePeriodSheet(rows, periodLabel) {
       headerRow = r;
       nameCol = cells.findIndex(c => c.includes('name') || c.includes('student'));
       if (nameCol < 0) nameCol = 1;
-      noCol   = cells.findIndex(c => c === 'no' || c === 'no.' || c === '#');
+      noCol = cells.findIndex(c => c === 'no' || c === 'no.' || c === '#');
       if (noCol < 0) noCol = 0;
       break;
     }
@@ -789,7 +789,7 @@ function parsePeriodSheet(rows, periodLabel) {
 
   const map = {};
   for (let r = dataStart; r < rows.length; r++) {
-    const row  = rows[r];
+    const row = rows[r];
     const name = String(row[nameCol] || '').trim();
     if (!name || isHeader(name) || isNumeric(name)) continue;
 
@@ -803,10 +803,10 @@ function parsePeriodSheet(rows, periodLabel) {
 function detectPeriodColumns(rows, headerRow, nameCol, maxScoreRowIdx, fallbackCols) {
   const info = {
     components: [], // individual score items (e.g., Quizzes)
-    ww:  { total: null, ps: null },
-    pt:  { total: null, ps: null },
-    qa:  { score: null, ps: null, maxScore: null },
-    fc:  null,
+    ww: { total: null, ps: null },
+    pt: { total: null, ps: null },
+    qa: { score: null, ps: null, maxScore: null },
+    fc: null,
   };
 
   const endCol = fallbackCols.fc !== null ? fallbackCols.fc : 50;
@@ -818,13 +818,13 @@ function detectPeriodColumns(rows, headerRow, nameCol, maxScoreRowIdx, fallbackC
       if (ci <= nameCol) return;
       const v = String(cell).trim().toLowerCase();
       if (v === 'ww%' || v === 'wws' || v === 'ww score' || v === 'ps') {
-         if(fallbackCols.pt !== null && ci < fallbackCols.pt) info.ww.ps = ci;
-         else if (fallbackCols.pt === null && !info.ww.ps) info.ww.ps = ci;
-         else info.pt.ps = ci;
+        if (fallbackCols.pt !== null && ci < fallbackCols.pt) info.ww.ps = ci;
+        else if (fallbackCols.pt === null && !info.ww.ps) info.ww.ps = ci;
+        else info.pt.ps = ci;
       }
       if (v === 'pt%' || v === 'pts' || v === 'pt score') info.pt.ps = ci;
       if (v === 'qa%' || v === 'qas' || v === 'qa score' || v === 'qs') info.qa.ps = ci;
-      if (v === 'fc'  || v === 'final' || v === 'f.c' || v === 'fg')  info.fc = ci;
+      if (v === 'fc' || v === 'final' || v === 'f.c' || v === 'fg') info.fc = ci;
       if (v === 'total' || v === 'ttl') {
         if (!info.ww.total && (fallbackCols.pt === null || ci < fallbackCols.pt)) info.ww.total = ci;
         else if (!info.pt.total) info.pt.total = ci;
@@ -839,22 +839,22 @@ function detectPeriodColumns(rows, headerRow, nameCol, maxScoreRowIdx, fallbackC
   // If qaCol is invalid (e.g. maxScore is <= 1 which is typical for Final Grades, not exams)
   // we scan backwards to find the true Exam column (usually the last column with a maxScore > 1)
   if (isNaN(qaMaxScore) || qaMaxScore <= 1 || qaCol === fallbackCols.fc || qaCol === info.fc) {
-      let found = false;
-      for (let ci = endCol - 1; ci > nameCol; ci--) {
-          const ms = parseFloat(rows[maxScoreRowIdx]?.[ci]);
-          if (!isNaN(ms) && ms > 1) {
-              qaCol = ci;
-              qaMaxScore = ms;
-              found = true;
-              break;
-          }
+    let found = false;
+    for (let ci = endCol - 1; ci > nameCol; ci--) {
+      const ms = parseFloat(rows[maxScoreRowIdx]?.[ci]);
+      if (!isNaN(ms) && ms > 1) {
+        qaCol = ci;
+        qaMaxScore = ms;
+        found = true;
+        break;
       }
-      if (!found) {
-          qaCol = null;
-          qaMaxScore = null;
-      }
+    }
+    if (!found) {
+      qaCol = null;
+      qaMaxScore = null;
+    }
   }
-  
+
   info.qa.score = qaCol;
   info.qa.maxScore = isNaN(qaMaxScore) ? null : qaMaxScore;
 
@@ -864,28 +864,28 @@ function detectPeriodColumns(rows, headerRow, nameCol, maxScoreRowIdx, fallbackC
 
     const maxScoreStr = String(rows[maxScoreRowIdx]?.[ci] || '').trim();
     const maxScore = parseFloat(maxScoreStr);
-    
+
     // Find a label by looking upwards
     let colName = '';
-    for(let r = maxScoreRowIdx - 1; r >= Math.max(0, headerRow - 1); r--) {
-        const v = String(rows[r]?.[ci] || '').trim();
-        if(v && !v.toLowerCase().includes('total') && !v.toLowerCase().includes('ps') && !v.toLowerCase().includes('ws')) {
-            colName = v;
-            break;
-        }
+    for (let r = maxScoreRowIdx - 1; r >= Math.max(0, headerRow - 1); r--) {
+      const v = String(rows[r]?.[ci] || '').trim();
+      if (v && !v.toLowerCase().includes('total') && !v.toLowerCase().includes('ps') && !v.toLowerCase().includes('ws')) {
+        colName = v;
+        break;
+      }
     }
 
     const vLower = colName.toLowerCase();
-    const isTotalOrPS = !colName || vLower.includes('total') || vLower === 'ps' || vLower === 'ws' || 
-                        vLower === 'ww%' || vLower === 'pt%' || vLower === 'qa%' || vLower === '%' || 
-                        maxScoreStr === '100' || vLower === 'fc' || vLower === 'final' || vLower === 'f.c';
+    const isTotalOrPS = !colName || vLower.includes('total') || vLower === 'ps' || vLower === 'ws' ||
+      vLower === 'ww%' || vLower === 'pt%' || vLower === 'qa%' || vLower === '%' ||
+      maxScoreStr === '100' || vLower === 'fc' || vLower === 'final' || vLower === 'f.c';
 
     if (!isNaN(maxScore) && maxScore > 0 && !isTotalOrPS && colName.length <= 30) {
-        info.components.push({
-            name: colName,
-            colIdx: ci,
-            maxScore: maxScore
-        });
+      info.components.push({
+        name: colName,
+        colIdx: ci,
+        maxScore: maxScore
+      });
     }
   }
 
@@ -897,8 +897,8 @@ function extractPeriodRow(row, colInfo, fallbackCols) {
   const fc = colInfo.fc !== null ? toNum(row[colInfo.fc]) : toNum(row[fallbackCols.fc]);
   const wwTotal = colInfo.ww.total !== null ? toNum(row[colInfo.ww.total]) : null;
   const ptTotal = colInfo.pt.total !== null ? toNum(row[colInfo.pt.total]) : null;
-  const wwPS    = colInfo.ww.ps !== null ? toNum(row[colInfo.ww.ps]) : null;
-  const ptPS    = colInfo.pt.ps !== null ? toNum(row[colInfo.pt.ps]) : null;
+  const wwPS = colInfo.ww.ps !== null ? toNum(row[colInfo.ww.ps]) : null;
+  const ptPS = colInfo.pt.ps !== null ? toNum(row[colInfo.pt.ps]) : null;
   const qaScore = colInfo.qa.score !== null ? toNum(row[colInfo.qa.score]) : null;
 
   const components = colInfo.components.map(c => ({
@@ -909,7 +909,7 @@ function extractPeriodRow(row, colInfo, fallbackCols) {
 
   return {
     components: components,
-    writtenWorks:  { total: wwTotal, percentage: wwPS },
+    writtenWorks: { total: wwTotal, percentage: wwPS },
     performanceTasks: { total: ptTotal, percentage: ptPS },
     quarterlyAssessment: { score: qaScore, maxScore: colInfo.qa.maxScore },
     finalGrade: fc,
@@ -942,8 +942,7 @@ function renderResults(list, query = '') {
   const el = document.getElementById('search-results');
   if (!query) {
     el.innerHTML = `<div class="no-results">
-      <div class="emoji">👆</div>
-      <div>Start typing a student name to search</div>
+      <div>Type your name to search</div>
     </div>`;
     return;
   }
@@ -981,18 +980,18 @@ let pendingStudentNo = null;
 function showStudent(no) {
   const s = students.find(x => x.no === no);
   if (!s) return;
-  
+
   if (s.studentId) {
-      pendingStudentNo = no;
-      renderStudentDetail(s, true); // true = locked view
-      
-      setTimeout(() => {
-          const inp = document.getElementById('inline-student-id');
-          if (inp) inp.focus();
-      }, 100);
-      return;
+    pendingStudentNo = no;
+    renderStudentDetail(s, true); // true = locked view
+
+    setTimeout(() => {
+      const inp = document.getElementById('inline-student-id');
+      if (inp) inp.focus();
+    }, 100);
+    return;
   }
-  
+
   renderStudentDetail(s, false);
 }
 
@@ -1000,14 +999,14 @@ function submitInlineStudentId() {
   const entered = document.getElementById('inline-student-id').value.trim();
   const s = students.find(x => x.no === pendingStudentNo);
   if (s && entered === s.studentId) {
-      pendingStudentNo = null;
-      renderStudentDetail(s, false);
+    pendingStudentNo = null;
+    renderStudentDetail(s, false);
   } else {
-      const err = document.getElementById('inline-id-error');
-      err.textContent = 'Incorrect Student ID. Try again.';
-      err.classList.remove('hidden');
-      document.getElementById('inline-student-id').value = '';
-      document.getElementById('inline-student-id').focus();
+    const err = document.getElementById('inline-id-error');
+    err.textContent = 'Incorrect Student ID. Try again.';
+    err.classList.remove('hidden');
+    document.getElementById('inline-student-id').value = '';
+    document.getElementById('inline-student-id').focus();
   }
 }
 
@@ -1134,17 +1133,17 @@ function buildStudentHTML(s, isLocked = false) {
 /* Grades per period */
 function buildGradesHTML(g) {
   const items = [
-    { label: 'Prelim Grade',     value: g.prelim,    color: 'fill-blue' },
-    { label: 'Midterm Grade',    value: g.midterm,   color: 'fill-purple' },
+    { label: 'Prelim Grade', value: g.prelim, color: 'fill-blue' },
+    { label: 'Midterm Grade', value: g.midterm, color: 'fill-purple' },
     { label: 'Semi-Final Grade', value: g.semiFinal, color: 'fill-amber' },
-    { label: 'Final Grade',      value: g.final,     color: 'fill-green' },
+    { label: 'Final Grade', value: g.final, color: 'fill-green' },
   ].filter(i => i.value !== null && i.value !== undefined && i.value !== '');
 
   if (!items.length) return '';
 
   const cards = items.map(i => {
     const pct = gradeToPercent(i.value);
-    
+
     // Apply pass/fail styling to the grade text itself
     let valClass = '';
     const numGrade = parseFloat(i.value);
@@ -1184,9 +1183,9 @@ function buildAttendanceHTML(att) {
   };
   const colors = { prelim: 'fill-blue', midterm: 'fill-purple', semiFinal: 'fill-amber', final: 'fill-green' };
 
-  const cards = Object.entries(att).filter(([,v]) => v && v.total > 0).map(([period, v]) => {
+  const cards = Object.entries(att).filter(([, v]) => v && v.total > 0).map(([period, v]) => {
     const pct = v.total > 0 ? Math.round((v.present / v.total) * 100) : 0;
-    
+
     let tableHtml = '';
     if (v.records && v.records.length > 0) {
       tableHtml = `
@@ -1200,9 +1199,9 @@ function buildAttendanceHTML(att) {
                 <tr>
                   <td>${r.date.split(' 00:00:00')[0]}</td>
                   <td>
-                    ${r.status === '1' || r.status.toLowerCase() === 'p' ? '<span style="color:var(--green)">Present</span>' : 
-                      r.status.toLowerCase() === 'a' ? '<span style="color:var(--red)">Absent</span>' : 
-                      (r.status || '—')}
+                    ${r.status === '1' || r.status.toLowerCase() === 'p' ? '<span style="color:var(--green)">Present</span>' :
+          r.status.toLowerCase() === 'a' ? '<span style="color:var(--red)">Absent</span>' :
+            (r.status || '—')}
                   </td>
                 </tr>
               `).join('')}
@@ -1251,48 +1250,48 @@ function buildPeriodsHTML(periods) {
   };
   const tagColors = { prelim: 'tag-blue', midterm: 'tag-purple', semiFinal: 'tag-amber', final: 'tag-green' };
 
-  const tables = Object.entries(periods).filter(([,v]) => v !== null).map(([period, data]) => {
+  const tables = Object.entries(periods).filter(([, v]) => v !== null).map(([period, data]) => {
     if (!data) return '';
-    const ww  = data.writtenWorks        || {};
-    const pt  = data.performanceTasks    || {};
-    const qa  = data.quarterlyAssessment || {};
-    const fg  = data.finalGrade;
+    const ww = data.writtenWorks || {};
+    const pt = data.performanceTasks || {};
+    const qa = data.quarterlyAssessment || {};
+    const fg = data.finalGrade;
     const comps = data.components || [];
 
     const rows = [];
-    
+
     const formatName = (name) => {
-        let n = name.trim();
-        if (/^Q\d+$/i.test(n)) return n.replace(/^Q/i, 'Quiz ');
-        if (/^A\d+$/i.test(n) || /^G\d+$/i.test(n)) return n.replace(/^[AG]/i, 'Activity ');
-        if (/^O\d+$/i.test(n)) return n.replace(/^O/i, 'Oral ');
-        if (/^SW\d+$/i.test(n)) return n.replace(/^SW/i, 'Seatwork ');
-        if (/^HW\d+$/i.test(n)) return n.replace(/^HW/i, 'Homework ');
-        if (/^PT\d+$/i.test(n)) return n.replace(/^PT/i, 'Performance Task ');
-        return n;
+      let n = name.trim();
+      if (/^Q\d+$/i.test(n)) return n.replace(/^Q/i, 'Quiz ');
+      if (/^A\d+$/i.test(n) || /^G\d+$/i.test(n)) return n.replace(/^[AG]/i, 'Activity ');
+      if (/^O\d+$/i.test(n)) return n.replace(/^O/i, 'Oral ');
+      if (/^SW\d+$/i.test(n)) return n.replace(/^SW/i, 'Seatwork ');
+      if (/^HW\d+$/i.test(n)) return n.replace(/^HW/i, 'Homework ');
+      if (/^PT\d+$/i.test(n)) return n.replace(/^PT/i, 'Performance Task ');
+      return n;
     };
 
     // Detailed components
     comps.forEach(c => {
-        rows.push({
-            label: escapeHTML(formatName(c.name)),
-            value: formatScore(c.score),
-            sub: c.maxScore ? `out of ${c.maxScore}` : ''
-        });
+      rows.push({
+        label: escapeHTML(formatName(c.name)),
+        value: formatScore(c.score),
+        sub: c.maxScore ? `out of ${c.maxScore}` : ''
+      });
     });
 
     if (ww.total !== null || pt.total !== null || qa.score !== null || fg !== null) {
       if (comps.length > 0) rows.push({ label: '—', value: '—', sub: '—' }); // visual separator
     }
 
-    if(ww.total !== null) rows.push({ label: 'Written Works (Total)', value: formatScore(ww.total), sub: ww.percentage !== null ? `${ww.percentage}%` : '' });
-    if(pt.total !== null) rows.push({ label: 'Performance Tasks (Total)', value: formatScore(pt.total), sub: pt.percentage !== null ? `${pt.percentage}%` : '' });
-    
+    if (ww.total !== null) rows.push({ label: 'Written Works (Total)', value: formatScore(ww.total), sub: ww.percentage !== null ? `${ww.percentage}%` : '' });
+    if (pt.total !== null) rows.push({ label: 'Performance Tasks (Total)', value: formatScore(pt.total), sub: pt.percentage !== null ? `${pt.percentage}%` : '' });
+
     const examLabel = periodLabels[period] ? `${periodLabels[period]} Exam` : 'Quarterly Assessment';
-    if(qa.score !== null) rows.push({ label: examLabel, value: formatScore(qa.score), sub: qa.maxScore ? `out of ${qa.maxScore}` : '' });
-    
+    if (qa.score !== null) rows.push({ label: examLabel, value: formatScore(qa.score), sub: qa.maxScore ? `out of ${qa.maxScore}` : '' });
+
     const finalGradeLabel = periodLabels[period] ? `${periodLabels[period].toUpperCase()} GRADE` : 'PERIOD GRADE';
-    if(fg !== null) rows.push({ label: finalGradeLabel, value: formatScore(fg), sub: fg ? gradeRemark(fg) : '' });
+    if (fg !== null) rows.push({ label: finalGradeLabel, value: formatScore(fg), sub: fg ? gradeRemark(fg) : '' });
 
     const validRows = rows.filter(r => r.value !== null && r.value !== undefined && r.value !== '');
     if (!validRows.length) return '';
@@ -1392,17 +1391,17 @@ function formatScore(v) {
 
 function escapeHTML(str) {
   return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function highlightMatch(text, query) {
-  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+  const re = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
   return text.replace(re, '<mark style="background:rgba(108,99,255,0.35);color:inherit;border-radius:3px;padding:0 2px;">$1</mark>');
 }
 
 function showError(msg) { console.warn('GradeViewer:', msg); }
-function clearError() {}
+function clearError() { }
 
 // Boot the app
 initApp();
