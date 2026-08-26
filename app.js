@@ -454,7 +454,7 @@ function parseFromSheets(sheets) {
 
   // ── STUDENT ID ──
   const idRows = sheets.studentId || [];
-  const idMap = parseStudentIdSheet(idRows);
+  const { idMap, nameMap } = parseStudentIdSheet(idRows);
 
   // ── SUMMARY (source of truth for student list + grades) ──
   const sumRows = sheets.summary || [];
@@ -510,6 +510,32 @@ function parseFromSheets(sheets) {
     });
   });
 
+  // ── SUPPLEMENT: add students who have an ID but were missing from Summary ──
+  const loadedNames = new Set(students.map(s => normalise(s.name)));
+  let supplementNo = students.length + 1;
+  for (const [normName, id] of Object.entries(idMap)) {
+    if (loadedNames.has(normName)) continue; // already captured
+    const origName = nameMap[normName] || normName;
+    const att = lookupByName(attendanceMap, normName) || {};
+    const pre = lookupByName(prelimMap,     normName) || {};
+    const mid = lookupByName(midtermMap,    normName) || {};
+    const sf  = lookupByName(sfMap,         normName) || {};
+    const fin = lookupByName(finalMap,      normName) || {};
+    students.push({
+      no: supplementNo++,
+      name: origName,
+      studentId: id,
+      grades: { prelim: null, midterm: null, semiFinal: null, final: null, remarks: '' },
+      attendance: att,
+      periods: {
+        prelim:    Object.keys(pre).length > 0 ? pre : null,
+        midterm:   Object.keys(mid).length > 0 ? mid : null,
+        semiFinal: Object.keys(sf).length  > 0 ? sf  : null,
+        final:     Object.keys(fin).length > 0 ? fin : null,
+      },
+    });
+  }
+
   if (students.length === 0) {
     showError('No student data found. Make sure the file has an Attendance, Prelim, Midterm, and Summary sheet.');
     return;
@@ -527,8 +553,9 @@ function parseFromSheets(sheets) {
    Expects rows: Student Name | StudentID
    ────────────────────────────────────────────── */
 function parseStudentIdSheet(rows) {
-  const result = {};
-  if (!rows || rows.length === 0) return result;
+  const idMap  = {}; // normalised name → id string
+  const nameMap = {}; // normalised name → original-case name
+  if (!rows || rows.length === 0) return { idMap, nameMap };
 
   let nameCol = 0;
   let idCol = 1;
@@ -549,12 +576,14 @@ function parseStudentIdSheet(rows) {
   for (let r = headerRow + 1; r < rows.length; r++) {
     const row = rows[r];
     const name = String(row[nameCol] || '').trim();
-    const id = String(row[idCol] || '').trim();
+    const id   = String(row[idCol]   || '').trim();
     if (name && !isHeader(name) && !isNumeric(name) && id) {
-      result[normalise(name)] = id;
+      const norm = normalise(name);
+      idMap[norm]  = id;
+      nameMap[norm] = name;
     }
   }
-  return result;
+  return { idMap, nameMap };
 }
 
 /* ──────────────────────────────────────────────
