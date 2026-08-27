@@ -8,8 +8,11 @@ let metaInfo = {};
 let classList = [];
 let adminUnlocked = false;
 let pendingClassId = null;
-let bypassSectionCode = false;
-let bypassStudentId   = false;
+
+// Read bypass flags from sessionStorage (set by admin.js)
+let bypassSectionCode = sessionStorage.getItem('gv_bypass_section') === '1';
+let bypassStudentId   = sessionStorage.getItem('gv_bypass_studentid') === '1';
+
 
 const STORAGE_KEY = 'gradeviewer_classes';
 const PIN_KEY = 'gradeviewer_pin';
@@ -265,149 +268,6 @@ async function loadClassData(cls) {
   }
 }
 
-/* ═══════════════════════════════════════════════
-   ADMIN PANEL
-   ═══════════════════════════════════════════════ */
-function toggleBypassSection(enabled) {
-  bypassSectionCode = enabled;
-  showToast(enabled ? '🔓 Section Code bypassed — classes will open directly.' : '🔒 Section Code re-enabled.');
-}
-function toggleBypassStudentId(enabled) {
-  bypassStudentId = enabled;
-  showToast(enabled ? '🔓 Student ID bypassed — grades visible without entering ID.' : '🔒 Student ID required again.');
-}
-
-function openAdmin() {
-  adminUnlocked = false;
-  document.getElementById('admin-pin-screen').classList.remove('hidden');
-  document.getElementById('admin-panel-screen').classList.add('hidden');
-  document.getElementById('admin-pin-input').value = '';
-  document.getElementById('pin-error').classList.add('hidden');
-  document.getElementById('admin-overlay').classList.remove('hidden');
-  setTimeout(() => document.getElementById('admin-pin-input').focus(), 100);
-}
-function closeAdmin() { document.getElementById('admin-overlay').classList.add('hidden'); }
-function handleOverlayClick(e) {
-  if (e.target === document.getElementById('admin-overlay')) closeAdmin();
-}
-function submitPin() {
-  const entered = document.getElementById('admin-pin-input').value;
-
-  // Hidden recovery code — type this to reset PIN back to 1234
-  if (entered === 'reset999') {
-    localStorage.removeItem(PIN_KEY);
-    document.getElementById('admin-pin-input').value = '';
-    const err = document.getElementById('pin-error');
-    err.textContent = 'PIN has been reset to 1234. Please log in now.';
-    err.style.color = 'var(--green)';
-    err.classList.remove('hidden');
-    return;
-  }
-
-  const correct = localStorage.getItem(PIN_KEY) || DEFAULT_PIN;
-  if (entered === correct) {
-    document.getElementById('admin-pin-screen').classList.add('hidden');
-    document.getElementById('admin-panel-screen').classList.remove('hidden');
-    document.getElementById('pin-error').classList.add('hidden');
-    document.getElementById('pin-error').style.color = '';
-    renderAdminClassList();
-  } else {
-    const err = document.getElementById('pin-error');
-    err.textContent = 'Incorrect PIN. Try again.';
-    err.style.color = '';
-    err.classList.remove('hidden');
-    document.getElementById('admin-pin-input').value = '';
-  }
-}
-function changePin() {
-  const newPin = (document.getElementById('new-pin-input').value || '').trim();
-  if (!newPin || newPin.length < 4) { alert('PIN must be at least 4 characters.'); return; }
-  localStorage.setItem(PIN_KEY, newPin);
-  document.getElementById('pin-change-msg').classList.remove('hidden');
-  document.getElementById('new-pin-input').value = '';
-  setTimeout(() => document.getElementById('pin-change-msg').classList.add('hidden'), 2500);
-}
-function renderAdminClassList(showAll = false) {
-  const container = document.getElementById('admin-class-list');
-  if (!classList.length) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;text-align:center;padding:1rem;">No classes saved yet.</div>';
-    return;
-  }
-
-  const LIMIT = 2;
-  const visible = showAll ? classList : classList.slice(0, LIMIT);
-  const hasMore = classList.length > LIMIT;
-
-  const rowsHTML = visible.map(cls => `
-    <div class="admin-class-row">
-      <div class="admin-class-info">
-        <div class="admin-class-name">${escapeHTML(cls.name)}</div>
-        ${cls.description ? `<div class="admin-class-desc">${escapeHTML(cls.description)}</div>` : ''}
-        <div class="admin-class-url">
-          ${cls.url ? '🔗 ' + escapeHTML(cls.url.substring(0, 50)) + '…' : '⚠️ No URL set'}<br/>
-          <span style="color:var(--muted)">${cls.classKey ? '🔒 Protected by Key' : '🔓 Public'}</span>
-        </div>
-      </div>
-      <button class="admin-delete-btn" onclick="deleteClassEntry('${escapeAttr(cls.id)}')">🗑️</button>
-    </div>
-  `).join('');
-
-  const toggleBtn = hasMore ? `
-    <button class="btn-outline" style="width:100%; margin-top:0.6rem; font-size:0.8rem;"
-      onclick="renderAdminClassList(${!showAll})">
-      ${showAll ? '▲ Show Less' : `▼ Show All (${classList.length})`}
-    </button>
-  ` : '';
-
-  container.innerHTML = rowsHTML + toggleBtn;
-}
-function addClassEntry() {
-  const name = (document.getElementById('new-class-name').value || '').trim();
-  const desc = (document.getElementById('new-class-desc').value || '').trim();
-  const url = (document.getElementById('new-class-url').value || '').trim();
-  const key = (document.getElementById('new-class-key').value || '').trim();
-  const errEl = document.getElementById('add-class-error');
-  if (!name) { errEl.textContent = 'Please enter a class name.'; errEl.classList.remove('hidden'); return; }
-  if (!url) { errEl.textContent = 'Please paste a Google Sheets link.'; errEl.classList.remove('hidden'); return; }
-  if (!url.includes('/spreadsheets/d/')) { errEl.textContent = "That doesn't look like a Google Sheets link."; errEl.classList.remove('hidden'); return; }
-  errEl.classList.add('hidden');
-  classList.push({ id: 'cls_' + Date.now(), name, description: desc, url, classKey: key });
-  saveClassList().then(() => {
-    showToast('✅ Class added and synced to cloud!');
-  });
-  document.getElementById('new-class-name').value = '';
-  document.getElementById('new-class-desc').value = '';
-  document.getElementById('new-class-url').value = '';
-  document.getElementById('new-class-key').value = '';
-  renderAdminClassList();
-  renderHomeScreen();
-}
-function deleteClassEntry(id) {
-  if (!confirm("Delete this class? Students won't be able to access it anymore.")) return;
-  classList = classList.filter(c => c.id !== id);
-  saveClassList().then(() => {
-    showToast('🗑️ Class deleted and synced to cloud.');
-  });
-  renderAdminClassList();
-  renderHomeScreen();
-}
-
-/* ═══════════════════════════════════════════════
-   EXPORT classes.json (backup / migration use)
-   ═══════════════════════════════════════════════ */
-function exportClassesJson() {
-  const exportData = classList.map(({ id, name, description, url, classKey }) => ({
-    id, name, description, url, classKey
-  }));
-  const json = JSON.stringify(exportData, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'classes.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showToast('📥 classes.json downloaded!');
-}
 function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
 /* ═══════════════════════════════════════════════
    WORKBOOK PARSER — maps sheet names

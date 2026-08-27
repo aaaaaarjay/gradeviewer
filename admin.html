@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Portal — Grade Viewer</title>
+  <meta name="description" content="Teacher administration portal for Grade Viewer. Manage classes, sheets, and settings." />
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+
+<body>
+
+  <!-- ══════════════════════════════════════════
+       LOCK SCREEN (PIN required)
+  ══════════════════════════════════════════ -->
+  <div id="lock-screen">
+    <div class="lock-orb lock-orb-1"></div>
+    <div class="lock-orb lock-orb-2"></div>
+    <div class="lock-card">
+      <div class="lock-logo">⚙️</div>
+      <div class="lock-title">Teacher Portal</div>
+      <div class="lock-sub">Enter your admin PIN to continue</div>
+      <input
+        type="password"
+        id="lock-pin-input"
+        class="lock-input"
+        placeholder="• • • •"
+        maxlength="8"
+        onkeydown="if(event.key==='Enter') unlockPortal()"
+        autofocus
+      />
+      <button class="lock-btn" onclick="unlockPortal()">Unlock →</button>
+      <div class="lock-error" id="lock-error"></div>
+      <div class="lock-back">← <a href="index.html">Back to Student Portal</a></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       DASHBOARD (shown after PIN unlock)
+  ══════════════════════════════════════════ -->
+  <div id="dashboard">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">📊</div>
+        <div class="sidebar-brand-text">
+          Grade Viewer
+          <span>Teacher Portal</span>
+        </div>
+      </div>
+
+      <div class="sidebar-nav">
+        <div class="nav-section-label">Management</div>
+
+        <button class="nav-item active" id="nav-classes" onclick="showPage('classes')">
+          <span class="nav-icon">📚</span> Classes
+        </button>
+
+        <button class="nav-item" id="nav-students" onclick="showPage('students')">
+          <span class="nav-icon">👥</span> Students
+          <span class="nav-badge soon">Soon</span>
+        </button>
+
+        <button class="nav-item" id="nav-grades" onclick="showPage('grades')">
+          <span class="nav-icon">📊</span> Grades
+          <span class="nav-badge soon">Soon</span>
+        </button>
+
+        <button class="nav-item" id="nav-attendance" onclick="showPage('attendance')">
+          <span class="nav-icon">📅</span> Attendance
+          <span class="nav-badge soon">Soon</span>
+        </button>
+
+        <div class="nav-section-label">System</div>
+
+        <button class="nav-item" id="nav-settings" onclick="showPage('settings')">
+          <span class="nav-icon">⚙️</span> Settings
+        </button>
+
+        <a class="nav-item" href="index.html">
+          <span class="nav-icon">🎓</span> Student Portal
+        </a>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">T</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name">Teacher</div>
+            <div class="sidebar-user-role">Administrator</div>
+          </div>
+          <button class="sidebar-logout" title="Lock portal" onclick="lockPortal()">🔒</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="admin-main">
+      <!-- Top bar -->
+      <div class="admin-topbar">
+        <div class="topbar-title" id="topbar-title">Classes</div>
+        <div class="topbar-actions">
+          <div class="firebase-pill" id="firebase-pill">
+            <span class="firebase-dot"></span>
+            <span id="firebase-pill-text">Connecting…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CLASSES PAGE ── -->
+      <div class="admin-page active" id="page-classes">
+        <div class="page-header">
+          <div class="page-title">📚 Classes</div>
+          <div class="page-sub">Manage your connected Google Sheets class records.</div>
+        </div>
+
+        <!-- Add new class -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">➕ Add New Class</div>
+            <button class="btn btn-ghost btn-sm" onclick="toggleAddForm()">
+              <span id="add-form-toggle-label">Hide Form</span>
+            </button>
+          </div>
+          <div class="panel-body" id="add-class-panel">
+            <div class="add-form-grid">
+              <div class="form-group full">
+                <label class="form-label">Class Name *</label>
+                <input type="text" id="new-class-name" class="form-input" placeholder="e.g. BSIT 1A — IT101" />
+              </div>
+              <div class="form-group full">
+                <label class="form-label">Description</label>
+                <input type="text" id="new-class-desc" class="form-input" placeholder="e.g. Instructor: Juan dela Cruz" />
+              </div>
+              <div class="form-group full">
+                <label class="form-label">Google Sheets Link *</label>
+                <input type="url" id="new-class-url" class="form-input" placeholder="https://docs.google.com/spreadsheets/d/…" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Section Code <span style="color:var(--muted); font-weight:400;">(optional)</span></label>
+                <input type="text" id="new-class-key" class="form-input" placeholder="Password for students" />
+              </div>
+            </div>
+            <div class="error-msg hidden" id="add-class-error"></div>
+            <div class="form-actions">
+              <button class="btn btn-ghost" onclick="clearAddForm()">Clear</button>
+              <button class="btn btn-primary" onclick="addClassEntry()">Add Class</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved classes table -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">📋 Saved Classes</div>
+            <div id="class-count" style="font-size:0.8rem; color:var(--muted);"></div>
+          </div>
+          <div id="class-table-wrap">
+            <!-- rendered by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS PAGE ── -->
+      <div class="admin-page" id="page-settings">
+        <div class="page-header">
+          <div class="page-title">⚙️ Settings</div>
+          <div class="page-sub">Configure your portal and teacher access.</div>
+        </div>
+
+        <!-- Teacher Mode toggles -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🎓 Teacher Mode</div>
+          </div>
+          <div class="panel-body">
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">🔓 Bypass Section Code</div>
+                <div class="toggle-sub">Skip the section code prompt when opening a class on the student portal</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-bypass-section" onchange="toggleBypassSection(this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-row">
+              <div>
+                <div class="toggle-label">🔓 Bypass Student ID</div>
+                <div class="toggle-sub">Skip the student ID prompt when viewing grades on the student portal</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-bypass-studentid" onchange="toggleBypassStudentId(this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Change PIN -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🔑 Change Admin PIN</div>
+          </div>
+          <div class="panel-body">
+            <div class="add-form-grid">
+              <div class="form-group">
+                <label class="form-label">Current PIN</label>
+                <input type="password" id="current-pin-input" class="form-input" placeholder="Current PIN" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">New PIN (min. 4 characters)</label>
+                <input type="password" id="new-pin-input" class="form-input" placeholder="New PIN" />
+              </div>
+            </div>
+            <div class="error-msg hidden" id="pin-change-error"></div>
+            <div class="success-msg hidden" id="pin-change-success">✅ PIN changed successfully!</div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="changePin()">Save New PIN</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Export backup -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">💾 Backup</div>
+          </div>
+          <div class="panel-body" style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+            <button class="btn btn-ghost" onclick="exportClassesJson()">📥 Export classes.json</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── COMING SOON PAGES ── -->
+      <div class="admin-page" id="page-students">
+        <div class="page-header"><div class="page-title">👥 Students</div></div>
+        <div style="text-align:center; padding: 4rem 2rem; color: var(--muted);">
+          <div style="font-size:3rem; margin-bottom:1rem;">🚧</div>
+          <div style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">Coming Soon</div>
+          <div style="font-size:0.875rem;">Student management will be available in a future update.</div>
+        </div>
+      </div>
+      <div class="admin-page" id="page-grades">
+        <div class="page-header"><div class="page-title">📊 Grades</div></div>
+        <div style="text-align:center; padding: 4rem 2rem; color: var(--muted);">
+          <div style="font-size:3rem; margin-bottom:1rem;">🚧</div>
+          <div style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">Coming Soon</div>
+          <div style="font-size:0.875rem;">Grade recording will be available in a future update.</div>
+        </div>
+      </div>
+      <div class="admin-page" id="page-attendance">
+        <div class="page-header"><div class="page-title">📅 Attendance</div></div>
+        <div style="text-align:center; padding: 4rem 2rem; color: var(--muted);">
+          <div style="font-size:3rem; margin-bottom:1rem;">🚧</div>
+          <div style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">Coming Soon</div>
+          <div style="font-size:0.875rem;">Attendance recording will be available in a future update.</div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="admin-toast" id="admin-toast"></div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCOddhoStINDV88cGGTatEXSIOz2foex-4",
+      authDomain: "gradeviewer-online.firebaseapp.com",
+      projectId: "gradeviewer-online",
+      storageBucket: "gradeviewer-online.firebasestorage.app",
+      messagingSenderId: "926273082901",
+      appId: "1:926273082901:web:214b7d4e59344acce5e01c"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const _db = firebase.firestore();
+    window.dispatchEvent(new Event('firebase-ready'));
+  </script>
+
+  <script src="admin.js"></script>
+</body>
+
+</html>

@@ -11,7 +11,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=3" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 
 <body>
@@ -28,7 +28,6 @@
       <div class="header-brand">
         <span>Grade Viewer</span>
       </div>
-      <button class="btn-outline" id="btn-admin" onclick="openAdmin()">⚙️ Manage Classes</button>
     </header>
 
     <div class="home-hero">
@@ -42,9 +41,14 @@
       </div>
       <div id="home-empty" class="home-empty hidden">
         <div class="emoji">📭</div>
-        <div>No classes added yet.</div>
-        <div style="font-size:0.85rem; margin-top:0.5rem; color:var(--muted)">Click ⚙️ Manage Classes to add one.</div>
+        <div>No classes available yet.</div>
+        <div style="font-size:0.85rem; margin-top:0.5rem; color:var(--muted)">Contact your teacher if you don't see your class.</div>
       </div>
+    </div>
+
+    <!-- Discreet teacher portal link -->
+    <div style="text-align:center; padding: 2rem 0 1rem; opacity: 0.4; font-size: 0.75rem;">
+      <a href="admin.html" style="color:var(--muted); text-decoration:none;">Teacher Portal</a>
     </div>
   </div>
 
@@ -82,109 +86,6 @@
     </div>
   </div>
 
-  <!-- ── ADMIN MODAL ── -->
-  <div id="admin-overlay" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
-    <div class="modal-card" id="admin-modal">
-
-      <!-- PIN screen -->
-      <div id="admin-pin-screen">
-        <div class="modal-header">
-          <div class="modal-title">⚙️ Admin Access</div>
-          <button class="modal-close" onclick="closeAdmin()">✕</button>
-        </div>
-        <p style="color:var(--muted); font-size:0.9rem; margin-bottom:1.25rem;">Enter your admin PIN to manage classes.
-        </p>
-        <div class="pin-wrap">
-          <input type="password" id="admin-pin-input" class="pin-input" placeholder="Enter PIN" maxlength="8"
-            onkeydown="if(event.key==='Enter') submitPin()" />
-          <button class="load-btn" style="margin-top:0.75rem;" onclick="submitPin()">Unlock →</button>
-        </div>
-        <div id="pin-error" class="error-msg hidden" style="margin-top:0.75rem;"></div>
-      </div>
-
-      <!-- Admin panel (shown after correct PIN) -->
-      <div id="admin-panel-screen" class="hidden">
-        <div class="modal-header">
-          <div class="modal-title">⚙️ Manage Classes</div>
-          <button class="modal-close" onclick="closeAdmin()">✕</button>
-        </div>
-
-        <!-- Firebase sync status -->
-        <div id="firebase-status" class="firebase-status firebase-status--connecting">
-          <span class="firebase-dot"></span>
-          <span id="firebase-status-text">Connecting to cloud…</span>
-        </div>
-
-        <!-- Add class form -->
-        <div class="admin-add-form">
-          <div class="admin-form-title">➕ Add New Class</div>
-          <input type="text" id="new-class-name" class="admin-input" placeholder="Class name (e.g. BSIT 1A — IT101)" />
-          <input type="text" id="new-class-desc" class="admin-input"
-            placeholder="Description (optional, e.g. Instructor: Juan dela Cruz)" />
-          <input type="url" id="new-class-url" class="admin-input"
-            placeholder="Google Sheets link (Anyone with link can view)" />
-          <input type="text" id="new-class-key" class="admin-input"
-            placeholder="Section Code (optional password for students)" />
-          <button class="load-btn" style="margin-top:0.5rem;" onclick="addClassEntry()">Add Class</button>
-          <div id="add-class-error" class="error-msg hidden" style="margin-top:0.5rem;"></div>
-        </div>
-
-        <div class="admin-divider"></div>
-
-        <!-- Saved classes list -->
-        <div class="admin-form-title">📋 Saved Classes</div>
-        <div id="admin-class-list" class="admin-class-list">
-          <!-- rendered by JS -->
-        </div>
-
-        <div class="admin-divider"></div>
-
-        <!-- Teacher convenience toggles -->
-        <div class="admin-form-title" style="margin-bottom:0.75rem;">🎓 Teacher Mode</div>
-        <div style="display:flex; flex-direction:column; gap:0.6rem; margin-bottom:0.5rem;">
-
-          <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:10px; padding:0.7rem 1rem;">
-            <div>
-              <div style="font-size:0.88rem; font-weight:600; color:var(--text);">🔓 Bypass Section Code</div>
-              <div style="font-size:0.75rem; color:var(--muted); margin-top:0.2rem;">Skip code prompt when opening a class</div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-bypass-section" onchange="toggleBypassSection(this.checked)" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:10px; padding:0.7rem 1rem;">
-            <div>
-              <div style="font-size:0.88rem; font-weight:600; color:var(--text);">🔓 Bypass Student ID</div>
-              <div style="font-size:0.75rem; color:var(--muted); margin-top:0.2rem;">Skip ID prompt when viewing a student</div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-bypass-studentid" onchange="toggleBypassStudentId(this.checked)" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-        </div>
-
-        <div class="admin-divider"></div>
-        <!-- Change PIN -->
-        <details style="margin-top:0.5rem;">
-          <summary style="cursor:pointer; color:var(--muted); font-size:0.82rem; font-weight:600;">🔑 Change PIN
-          </summary>
-          <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
-            <input type="password" id="new-pin-input" class="admin-input" style="flex:1; min-width:120px;"
-              placeholder="New PIN" />
-            <button class="btn-outline" onclick="changePin()">Save PIN</button>
-          </div>
-          <div id="pin-change-msg" class="hidden" style="font-size:0.8rem; color:var(--green); margin-top:0.4rem;">✅ PIN
-            changed!</div>
-        </details>
-
-      </div>
-
-    </div>
-  </div>
 
   <!-- ── CLASS KEY MODAL ── -->
   <div id="class-key-overlay" class="modal-overlay hidden" onclick="handleClassKeyOverlayClick(event)">
