@@ -435,9 +435,10 @@ function parseStudentIdSheet(rows) {
 
   for (let r = headerRow + 1; r < rows.length; r++) {
     const row = rows[r];
-    const name = String(row[nameCol] || '').trim();
+    // Use flexible scanner for student names
+    const name = findNameInRow(row, nameCol);
     const id   = String(row[idCol]   || '').trim();
-    if (name && !isHeader(name) && !isNumeric(name) && id) {
+    if (name && id) {
       const norm = normalise(name);
       idMap[norm]  = id;
       nameMap[norm] = name;
@@ -461,33 +462,32 @@ function parseSummarySheet(rows) {
       break;
     }
   }
-  if (headerRow < 0) headerRow = 5; // fallback
+  if (headerRow < 0) headerRow = 5;
 
   const header = rows[headerRow].map(c => String(c).toLowerCase().trim());
-  const colNo = header.findIndex(h => h === 'no' || h === '#' || h === 'no.');
+  const colNo  = header.findIndex(h => h === 'no' || h === '#' || h === 'no.');
   const colName = header.findIndex(h => h.includes('name'));
-  // Grade columns — look for PG, MG, SE / SF, FG / F
   function findCol(keywords) {
     return header.findIndex(h => keywords.some(k => h.includes(k)));
   }
-  const colPG = findCol(['pg', 'prelim grade', 'prelim']);
-  const colMG = findCol(['mg', 'midterm grade', 'midterm']);
-  const colSE = findCol(['se', 'semi', 'sf']);
-  const colFG = findCol(['fg', 'final grade', 'fg ']);
+  const colPG  = findCol(['pg', 'prelim grade', 'prelim']);
+  const colMG  = findCol(['mg', 'midterm grade', 'midterm']);
+  const colSE  = findCol(['se', 'semi', 'sf']);
+  const colFG  = findCol(['fg', 'final grade', 'fg ']);
   const colRem = findCol(['remark', 'status', 'remarks']);
 
   for (let r = headerRow + 1; r < rows.length; r++) {
     const row = rows[r];
-    const name = String(row[colName] || '').trim();
-    if (!name || name.toLowerCase() === 'student\'s name' || name.toLowerCase() === 'name') continue;
-    if (isNumeric(name)) continue;
+    // Use flexible scanner — handles merged/shifted cells for students 53+
+    const name = findNameInRow(row, colName);
+    if (!name) continue;
     result.push({
-      no: colNo >= 0 ? toNum(row[colNo]) : r - headerRow,
+      no:      colNo  >= 0 ? toNum(row[colNo]) : r - headerRow,
       name,
-      pg: colPG >= 0 ? toNum(row[colPG]) : null,
-      mg: colMG >= 0 ? toNum(row[colMG]) : null,
-      se: colSE >= 0 ? toNum(row[colSE]) : null,
-      fg: colFG >= 0 ? toNum(row[colFG]) : null,
+      pg:      colPG  >= 0 ? toNum(row[colPG])  : null,
+      mg:      colMG  >= 0 ? toNum(row[colMG])  : null,
+      se:      colSE  >= 0 ? toNum(row[colSE])  : null,
+      fg:      colFG  >= 0 ? toNum(row[colFG])  : null,
       remarks: colRem >= 0 ? String(row[colRem] || '').trim() : '',
     });
   }
@@ -552,8 +552,9 @@ function parseAttendanceSheet(rows) {
 
   for (let r = dataStart; r < rows.length; r++) {
     const row = rows[r];
-    const name = String(row[nameCol] || '').trim();
-    if (!name || isHeader(name) || isNumeric(name)) continue;
+    // Use flexible scanner for student names
+    const name = findNameInRow(row, nameCol);
+    if (!name) continue;
 
     const att = {};
     for (const [period, col] of Object.entries(totalCols)) {
@@ -704,8 +705,9 @@ function parsePeriodSheet(rows, periodLabel) {
   const map = {};
   for (let r = dataStart; r < rows.length; r++) {
     const row = rows[r];
-    const name = String(row[nameCol] || '').trim();
-    if (!name || isHeader(name) || isNumeric(name)) continue;
+    // Use flexible scanner for student names
+    const name = findNameInRow(row, nameCol);
+    if (!name) continue;
 
     const entry = extractPeriodRow(row, colInfo, cols);
     map[normalise(name)] = entry;
@@ -1315,6 +1317,46 @@ function toNum(v) {
 
 function isNumeric(str) {
   return /^\d+$/.test(String(str).trim());
+}
+
+/* Returns true if str looks like a Filipino class-record student name:
+   - All or mostly uppercase letters
+   - Has at least one space or comma (not a single word label)
+   - Not a known header/label value
+*/
+function looksLikeStudentName(str) {
+  if (!str || str.length < 3) return false;
+  const s = str.trim();
+  if (isHeader(s) || isNumeric(s)) return false;
+  // Must be mostly uppercase letters (>60% uppercase alpha chars)
+  const alpha = s.replace(/[^a-zA-Z]/g, '');
+  if (alpha.length === 0) return false;
+  const upperRatio = (s.replace(/[^A-Z]/g, '').length) / alpha.length;
+  if (upperRatio < 0.5) return false;
+  // Must contain at least a space or comma — avoids single-word labels like "TOTAL"
+  if (!s.includes(' ') && !s.includes(',')) return false;
+  return true;
+}
+
+/* Scans a row for the best student-name candidate.
+   Tries fixedCol first, then adjacent columns.
+   Returns '' if nothing found.
+*/
+function findNameInRow(row, fixedCol) {
+  // Try fixed column first
+  if (fixedCol >= 0 && fixedCol < row.length) {
+    const v = String(row[fixedCol] || '').trim();
+    if (looksLikeStudentName(v)) return v;
+  }
+  // Scan nearby columns (within ±3)
+  const start = Math.max(0, (fixedCol >= 0 ? fixedCol : 1) - 1);
+  const end   = Math.min(row.length - 1, (fixedCol >= 0 ? fixedCol : 1) + 3);
+  for (let ci = start; ci <= end; ci++) {
+    if (ci === fixedCol) continue;
+    const v = String(row[ci] || '').trim();
+    if (looksLikeStudentName(v)) return v;
+  }
+  return '';
 }
 
 function isHeader(str) {
