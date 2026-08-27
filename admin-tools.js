@@ -38,6 +38,22 @@ function looksLikeName(str) {
   return true;
 }
 
+/* Scans a row for the best student-name candidate near a fixed column */
+function findNameInRow(row, fixedCol) {
+  if (fixedCol >= 0 && fixedCol < row.length) {
+    const v = String(row[fixedCol] || '').trim();
+    if (looksLikeName(v)) return v;
+  }
+  const start = Math.max(0, (fixedCol >= 0 ? fixedCol : 1) - 1);
+  const end   = Math.min(row.length - 1, (fixedCol >= 0 ? fixedCol : 1) + 3);
+  for (let ci = start; ci <= end; ci++) {
+    if (ci === fixedCol) continue;
+    const v = String(row[ci] || '').trim();
+    if (looksLikeName(v)) return v;
+  }
+  return '';
+}
+
 async function fetchStudentsForClass(classId) {
   const cls = classList.find(c => c.id === classId);
   if (!cls || !cls.url) return [];
@@ -54,25 +70,38 @@ async function fetchStudentsForClass(classId) {
     const wb = XLSX.read(arrayBuffer, { type: 'array' });
     if (!wb.SheetNames.length) return [];
     
-    // Scan the first few sheets (usually Summary, Prelim, Midterm) to find names
+    // Scan sheets to find names (prefer Summary or Student ID sheet)
     const names = new Set();
     
     for (let i = 0; i < Math.min(4, wb.SheetNames.length); i++) {
       const sheet = wb.Sheets[wb.SheetNames[i]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
       
-      for (const row of rows) {
-        // Scan the first 5 columns for something that looks like a name
-        for (let col = 0; col < Math.min(5, row.length); col++) {
-          const val = String(row[col] || '').trim();
-          if (looksLikeName(val)) {
-            names.add(val);
-            break; // found name in this row, skip to next row
-          }
+      let headerRow = -1;
+      let nameCol = 0;
+      
+      // 1. Find the header row that contains "Name" or "Student"
+      for (let r = 0; r < Math.min(rows.length, 15); r++) {
+        const cells = rows[r].map(c => String(c).toLowerCase().trim());
+        const idx = cells.findIndex(c => c.includes('name') || c.includes('student'));
+        if (idx >= 0) {
+          headerRow = r;
+          nameCol = idx;
+          break;
         }
       }
       
-      if (names.size > 0) break; // found a list, no need to check other sheets
+      if (headerRow < 0) continue; // Skip sheet if no header found
+      
+      // 2. Read names from that column downwards
+      for (let r = headerRow + 1; r < rows.length; r++) {
+        const val = findNameInRow(rows[r], nameCol);
+        if (val) {
+          names.add(val);
+        }
+      }
+      
+      if (names.size > 10) break; // If we found a good list, stop searching other sheets
     }
     
     return Array.from(names).sort();
