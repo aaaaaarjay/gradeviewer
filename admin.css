@@ -602,3 +602,74 @@ html, body {
 .error-msg { color: var(--red); font-size: 0.8rem; margin-top: 0.3rem; }
 .success-msg { color: var(--green); font-size: 0.8rem; margin-top: 0.3rem; }
 .divider { height: 1px; background: var(--border); margin: 1rem 0; }
+
+/* ═══════════════════════════════════════════════
+   GROUPS & PICKER STYLES
+   ═══════════════════════════════════════════════ */
+
+/* ── Groups ── */
+.group-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.group-header {
+  background: rgba(255,255,255,0.03);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.group-name-input {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  width: 100%;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.group-name-input:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  outline: none;
+}
+.group-name-input:hover:not(:focus) {
+  border-color: var(--border2);
+}
+.group-list {
+  padding: 0.75rem;
+  flex: 1;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.group-student {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: grab;
+  transition: border-color 0.2s, background 0.2s;
+}
+.group-student:active {
+  cursor: grabbing;
+}
+.group-student:hover {
+  border-color: var(--accent);
+  background: rgba(108,99,255,0.05);
+}
+
+/* ── Picker ── */
+#picker-wheel-canvas {
+  border-radius: 50%;
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
+  border: 4px solid var(--surface2);
+}
+

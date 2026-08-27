@@ -64,6 +64,14 @@
           <span class="nav-badge soon">Soon</span>
         </button>
 
+        <button class="nav-item" id="nav-groups" onclick="showPage('groups')">
+          <span class="nav-icon">🧩</span> Groups
+        </button>
+
+        <button class="nav-item" id="nav-picker" onclick="showPage('picker')">
+          <span class="nav-icon">🎰</span> Picker
+        </button>
+
         <button class="nav-item" id="nav-grades" onclick="showPage('grades')">
           <span class="nav-icon">📊</span> Grades
           <span class="nav-badge soon">Soon</span>
@@ -235,6 +243,129 @@
         </div>
       </div>
 
+      <!-- ── GROUPS PAGE ── -->
+      <div class="admin-page" id="page-groups">
+        <div class="page-header">
+          <div class="page-title">🧩 Groups Manager</div>
+          <div class="page-sub">Create and manage randomized student groups for activities.</div>
+        </div>
+        
+        <!-- Controls -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Active Class</div>
+          </div>
+          <div class="panel-body" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+            <div class="form-group" style="flex:1; min-width:200px; margin:0;">
+              <select id="group-class-select" class="form-input" onchange="loadClassForGroups()">
+                <option value="">-- Select a Class --</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-load-groups" onclick="loadClassForGroups()">Load Students</button>
+          </div>
+        </div>
+
+        <div id="groups-workspace" class="hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="panel-title" id="groups-class-name">Class Name</div>
+              <div style="color:var(--muted); font-size:0.85rem;" id="groups-student-count">0 students</div>
+            </div>
+            <div class="panel-body">
+              <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <label>Divide into:</label>
+                  <input type="number" id="group-count-input" class="form-input" style="width:70px;" min="2" max="20" value="5" />
+                  <select id="group-mode-select" class="form-input" style="width:auto;">
+                    <option value="groups">Groups</option>
+                    <option value="members">Members per group</option>
+                  </select>
+                </div>
+                <button class="btn btn-primary" onclick="randomizeGroups()">🎲 Randomize</button>
+                <button class="btn btn-ghost" onclick="saveGroups()">💾 Save Groups</button>
+              </div>
+
+              <!-- Group Cards Container -->
+              <div id="groups-container" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:1rem;">
+                <!-- rendered by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RANDOM PICKER PAGE ── -->
+      <div class="admin-page" id="page-picker">
+        <div class="page-header">
+          <div class="page-title">🎰 Random Picker</div>
+          <div class="page-sub">Pick random students for oral recitation.</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-body" style="display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; padding: 1rem;">
+            <div class="form-group" style="flex:1; min-width:200px; margin:0;">
+              <label class="form-label">Active Section</label>
+              <select id="picker-class-select" class="form-input" onchange="loadClassForPicker()">
+                <option value="">-- Select a Class --</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Picker Mode</label>
+              <select id="picker-mode-select" class="form-input" onchange="togglePickerMode()">
+                <option value="normal">Normal Mode</option>
+                <option value="wheel">Wheel Mode</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0; display:flex; align-items:center; gap:0.5rem; height:42px; padding-bottom:10px;">
+               <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.85rem;">
+                 <input type="checkbox" id="picker-remove-picked" /> Remove after picked
+               </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="picker-workspace" class="hidden">
+          
+          <!-- Normal Mode Display -->
+          <div id="picker-normal-view" class="panel" style="text-align:center; padding: 4rem 2rem;">
+            <div id="picker-normal-name" style="font-size:3.5rem; font-weight:800; font-family:'Outfit', sans-serif; letter-spacing:-1px; margin-bottom:1.5rem; min-height:80px; display:flex; align-items:center; justify-content:center; background:linear-gradient(90deg, #fff, #a5a5a5); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+              READY
+            </div>
+            <p style="color:var(--muted); margin-bottom:2rem;">Click the button below to draw a student.</p>
+            <button class="btn btn-primary" style="font-size:1.2rem; padding:1rem 2rem; border-radius:50px;" onclick="pickRandomStudentNormal()">🎲 Pick Random Student</button>
+          </div>
+
+          <!-- Wheel Mode Display -->
+          <div id="picker-wheel-view" class="panel hidden" style="text-align:center; padding: 2rem;">
+            <div style="position:relative; width:400px; height:400px; margin: 0 auto 2rem;">
+               <div style="position:absolute; top:-20px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:20px solid transparent; border-right:20px solid transparent; border-top:30px solid var(--red); z-index:10;"></div>
+               <canvas id="picker-wheel-canvas" width="400" height="400"></canvas>
+            </div>
+            <button class="btn btn-primary" style="font-size:1.2rem; padding:1rem 2rem; border-radius:50px;" onclick="spinWheel()">🎡 Spin the Wheel</button>
+          </div>
+
+          <!-- Winner / Quick Score -->
+          <div id="picker-winner-panel" class="panel hidden" style="margin-top:1.5rem; text-align:center; border: 2px solid var(--accent);">
+            <div class="panel-body">
+               <div style="color:var(--accent); font-weight:700; letter-spacing:2px; margin-bottom:0.5rem;">WINNER!</div>
+               <div id="picker-winner-name" style="font-size:2.5rem; font-weight:800; margin-bottom:1.5rem; color:#fff;"></div>
+               
+               <div style="max-width:400px; margin:0 auto; background:rgba(255,255,255,0.03); padding:1.5rem; border-radius:12px;">
+                 <div class="form-group" style="text-align:left;">
+                   <label class="form-label">Category</label>
+                   <input type="text" id="picker-score-category" class="form-input" placeholder="e.g. Oral Recitation" />
+                 </div>
+                 <div class="form-group" style="text-align:left;">
+                   <label class="form-label">Score</label>
+                   <input type="number" id="picker-score-value" class="form-input" placeholder="e.g. 100" />
+                 </div>
+                 <button class="btn btn-primary" style="width:100%;" onclick="savePickerScore()">✔ Save Score</button>
+               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── COMING SOON PAGES ── -->
       <div class="admin-page" id="page-students">
         <div class="page-header"><div class="page-title">👥 Students</div></div>
@@ -284,7 +415,11 @@
     window.dispatchEvent(new Event('firebase-ready'));
   </script>
 
+  <!-- SheetJS for reading Excel in Admin -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
   <script src="admin.js"></script>
+  <script src="admin-tools.js"></script>
 </body>
 
 </html>
