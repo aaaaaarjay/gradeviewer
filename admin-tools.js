@@ -445,9 +445,10 @@ function renderGroups() {
   const container = document.getElementById('groups-container');
   container.innerHTML = currentGroups.map((g, gidx) => `
     <div class="group-card ${groupsEditMode ? 'edit-mode' : ''}" ondragover="allowDrop(event)" ondrop="drop(event, ${gidx})">
-      <div class="group-header">
+      <div class="group-header" style="display:flex; align-items:center; gap:0.5rem;">
         <input type="text" class="group-name-input" value="${escapeHTML(g.name)}" 
-               onchange="updateGroupName(${gidx}, this.value)" ${!groupsEditMode ? 'readonly' : ''} />
+               onchange="updateGroupName(${gidx}, this.value)" ${!groupsEditMode ? 'readonly' : ''} style="flex:1;" />
+        ${groupsEditMode ? `<button class="remove-btn" style="opacity:1; font-size:1rem; padding:0.2rem 0.5rem; color:var(--red);" onclick="deleteGroup(${gidx})" title="Delete group">🗑️</button>` : ''}
       </div>
       <div class="group-list">
         ${g.students.map((s, sidx) => `
@@ -466,6 +467,21 @@ window.removeStudentFromGroup = function(gidx, sidx) {
   unassignedPool.push(student);
   renderGroups();
   renderUnassigned();
+}
+
+window.deleteGroup = function(gidx) {
+  // Move all students in this group back to unassigned pool
+  const removed = currentGroups.splice(gidx, 1)[0];
+  unassignedPool.push(...removed.students);
+  // Re-number groups
+  currentGroups.forEach((g, i) => {
+    if (g.name === `Group ${gidx + 1}` || g.name.match(/^Group \d+$/)) {
+      g.name = 'Group ' + (i + 1);
+    }
+  });
+  renderGroups();
+  renderUnassigned();
+  showToast(`🗑️ ${removed.name} deleted — students moved to pool`);
 }
 
 function updateGroupName(gidx, newName) {
