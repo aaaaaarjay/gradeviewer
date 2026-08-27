@@ -1229,8 +1229,8 @@ function buildPeriodsHTML(periods) {
       if (comps.length > 0) rows.push({ label: '—', value: '—', sub: '—' }); // visual separator
     }
 
-    if (ww.total !== null) rows.push({ label: 'Written Works (Total)', value: formatScore(ww.total), sub: ww.percentage !== null ? `${ww.percentage}%` : '' });
-    if (pt.total !== null) rows.push({ label: 'Performance Tasks (Total)', value: formatScore(pt.total), sub: pt.percentage !== null ? `${pt.percentage}%` : '' });
+    if (ww.total !== null) rows.push({ label: 'Written Works (Total)', value: formatScore(ww.total), sub: (ww.percentage !== null && ww.percentage !== undefined) ? `${ww.percentage}%` : '' });
+    if (pt.total !== null) rows.push({ label: 'Performance Tasks (Total)', value: formatScore(pt.total), sub: (pt.percentage !== null && pt.percentage !== undefined) ? `${pt.percentage}%` : '' });
 
     const examLabel = periodLabels[period] ? `${periodLabels[period]} Exam` : 'Quarterly Assessment';
     if (qa.score !== null) rows.push({ label: examLabel, value: formatScore(qa.score), sub: qa.maxScore ? `out of ${qa.maxScore}` : '' });
@@ -1283,12 +1283,29 @@ function normalise(str) {
 
 function lookupByName(map, normName) {
   if (!map) return null;
-  // Exact
-  if (map[normName]) return map[normName];
-  // Partial match
+  // 1. Exact match
+  if (map[normName] !== undefined) return map[normName];
+  // 2. One contains the other (handles truncated names)
   const keys = Object.keys(map);
-  const match = keys.find(k => k.includes(normName) || normName.includes(k));
-  return match ? map[match] : null;
+  const exact = keys.find(k => k === normName);
+  if (exact) return map[exact];
+  // 3. Substring match — one contains the other
+  const sub = keys.find(k => k.length >= 4 && normName.length >= 4 && (k.includes(normName) || normName.includes(k)));
+  if (sub) return map[sub];
+  // 4. Last-name prefix match — Filipino names often have long middle names truncated
+  //    Compare first tokens (surname)
+  const nameParts = normName.split(',');
+  if (nameParts.length >= 2) {
+    const surname = nameParts[0].trim();
+    const firstPart = nameParts[1].trim().split(' ')[0]; // first given name token
+    const fuzzy = keys.find(k => {
+      const kParts = k.split(',');
+      if (kParts.length < 2) return false;
+      return kParts[0].trim() === surname && kParts[1].trim().startsWith(firstPart);
+    });
+    if (fuzzy) return map[fuzzy];
+  }
+  return null;
 }
 
 function toNum(v) {
@@ -1302,7 +1319,18 @@ function isNumeric(str) {
 
 function isHeader(str) {
   const s = str.toLowerCase().trim();
-  return ['student\'s name', 'name', 'student name', 'no.', 'no', '#'].includes(s);
+  // Exact column header matches
+  if (['student\'s name', 'name', 'student name', 'no.', 'no', '#'].includes(s)) return true;
+  // Non-student row patterns: labels like "Instructor:", "Average:", "Total", etc.
+  if (s.startsWith('instructor') || s.startsWith('average') || s.startsWith('total')
+    || s.startsWith('subject') || s.startsWith('section') || s.startsWith('class')
+    || s.startsWith('school') || s.startsWith('teacher') || s.startsWith('semester')
+    || s.startsWith('grade level') || s.startsWith('quarter') || s.endsWith(':')
+    || s === 'remarks' || s === 'status') return true;
+  // A valid student name must have at least one comma or be at least 5 chars
+  // and must not be all digits or single words that are clearly labels
+  if (s.length < 3) return true;
+  return false;
 }
 
 function getInitial(name) {
