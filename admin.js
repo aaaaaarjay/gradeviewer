@@ -135,10 +135,13 @@ async function saveClassList() {
    ═══════════════════════════════════════════════ */
 const PAGE_TITLES = {
   classes:    'Classes',
+  scores:     'Score Recorder',
   students:   'Students',
   grades:     'Grades',
   attendance: 'Attendance',
   settings:   'Settings',
+  groups:     'Groups',
+  picker:     'Random Picker',
 };
 
 function showPage(id) {
