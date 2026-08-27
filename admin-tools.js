@@ -9,6 +9,14 @@ let pickerMode = 'normal';
 let wheelAngle = 0;
 let wheelSpinning = false;
 let wheelReqFrame;
+let groupsEditMode = false;
+let unassignedPool = [];
+
+/* ─── FULLSCREEN ─── */
+function toggleFullscreen(pageId) {
+  const page = document.getElementById(pageId);
+  if (page) page.classList.toggle('fullscreen-mode');
+}
 
 /* ─── SHARED: FETCH STUDENTS ─── */
 function extractSheetId(url) {
@@ -16,15 +24,32 @@ function extractSheetId(url) {
   return match ? match[1] : null;
 }
 
+function isHeader(str) {
+  const s = str.toLowerCase().trim();
+  if (['student\'s name', 'name', 'student name', 'no.', 'no', '#'].includes(s)) return true;
+  if (s.startsWith('instructor') || s.startsWith('average') || s.startsWith('total')
+    || s.startsWith('subject') || s.startsWith('section') || s.startsWith('class')
+    || s.startsWith('school') || s.startsWith('teacher') || s.startsWith('semester')
+    || s.startsWith('grade level') || s.startsWith('quarter') || s.endsWith(':')
+    || s.includes('percentage distribution') || s.includes('score entry')
+    || s === 'remarks' || s === 'status') return true;
+  if (s.length < 3) return true;
+  return false;
+}
+
+function isNumeric(str) {
+  return /^\d+$/.test(String(str).trim());
+}
+
 function looksLikeName(str) {
   if (!str || str.length < 3) return false;
   const s = str.trim();
   const lower = s.toLowerCase();
   
+  if (isHeader(s) || isNumeric(s)) return false;
+  
   // Exclude common labels
   if (['male','female','total','average','mean','sd','remarks'].includes(lower)) return false;
-  if (lower.startsWith('instructor') || lower.startsWith('teacher') || lower.endsWith(':')) return false;
-  if (/^\d+$/.test(s)) return false;
   
   // Must be mostly uppercase (Filipino class record format)
   const alpha = s.replace(/[^a-zA-Z]/g, '');
@@ -154,50 +179,241 @@ async function loadClassForGroups() {
   `;
 }
 
-function randomizeGroups() {
+// Sets up empty group cards and puts everyone in unassigned pool
+function initGroups() {
   if (currentStudents.length === 0) return;
   
   const count = parseInt(document.getElementById('group-count-input').value) || 5;
   const mode = document.getElementById('group-mode-select').value;
   
-  // Shuffle array
-  const shuffled = [...currentStudents].sort(() => Math.random() - 0.5);
-  currentGroups = [];
-  
   let numGroups = count;
   if (mode === 'members') {
-    numGroups = Math.ceil(shuffled.length / count);
+    numGroups = Math.ceil(currentStudents.length / count);
   }
   
-  // Initialize groups
+  currentGroups = [];
   for (let i = 0; i < numGroups; i++) {
-    currentGroups.push({
-      id: 'group_' + i,
-      name: 'Group ' + (i + 1),
-      students: []
-    });
+    currentGroups.push({ id: 'group_' + i, name: 'Group ' + (i + 1), students: [] });
   }
   
-  // Distribute
-  shuffled.forEach((student, idx) => {
-    currentGroups[idx % numGroups].students.push(student);
+  unassignedPool = [...currentStudents];
+  document.getElementById('unassigned-pool').classList.remove('hidden');
+  document.getElementById('btn-spin-group').style.display = 'inline-flex';
+  document.getElementById('btn-add-group').style.display = 'inline-flex';
+  
+  groupsEditMode = false; // Start in locked mode
+  renderGroups();
+  renderUnassigned();
+}
+
+function addGroupBox() {
+  const idx = currentGroups.length;
+  currentGroups.push({ id: 'group_' + idx, name: 'Group ' + (idx + 1), students: [] });
+  renderGroups();
+}
+
+function renderUnassigned() {
+  document.getElementById('unassigned-count').textContent = unassignedPool.length;
+  document.getElementById('unassigned-list').innerHTML = unassignedPool.map((s, idx) => `
+    <div class="unassigned-student" draggable="true" ondragstart="dragUnassigned(event, ${idx})">
+      ${escapeHTML(s)}
+    </div>
+  `).join('');
+  
+  if (unassignedPool.length === 0) {
+    document.getElementById('btn-spin-group').style.display = 'none';
+  }
+}
+
+function randomizeRemaining() {
+  if (unassignedPool.length === 0 || currentGroups.length === 0) return;
+  
+  // Shuffle unassigned
+  const shuffled = [...unassignedPool].sort(() => Math.random() - 0.5);
+  
+  // Sort groups by size so we add to smallest groups first
+  let targetGroupIdx = 0;
+  
+  shuffled.forEach(student => {
+    // Find index of group with fewest students
+    let minStudents = 9999;
+    let minIdx = 0;
+    for (let i = 0; i < currentGroups.length; i++) {
+      if (currentGroups[i].students.length < minStudents) {
+        minStudents = currentGroups[i].students.length;
+        minIdx = i;
+      }
+    }
+    currentGroups[minIdx].students.push(student);
   });
   
+  unassignedPool = [];
+  renderUnassigned();
   renderGroups();
+}
+
+// Intense Spin for Groups
+function spinToAssignGroup() {
+  if (unassignedPool.length === 0) {
+    showToast("No students left to assign!");
+    return;
+  }
+  
+  // Reuse Picker logic but for Groups
+  pickerPool = [...unassignedPool];
+  
+  // Set up UI for wheel popup
+  document.getElementById('picker-normal-view').classList.add('hidden');
+  document.getElementById('picker-wheel-view').classList.remove('hidden');
+  document.getElementById('picker-workspace').classList.remove('hidden');
+  
+  // Scroll to workspace
+  document.getElementById('groups-workspace').scrollIntoView({ behavior: 'smooth' });
+  
+  // Hide normal wheel button, use programmatic spin
+  wheelSpinning = true;
+  document.getElementById('picker-winner-panel').classList.add('hidden');
+  
+  const spinTarget = (Math.random() * 3 + 3) * 2 * Math.PI; 
+  let currentVelocity = 0.4;
+  let deceleration = currentVelocity / 150; 
+  
+  function animate() {
+    wheelAngle += currentVelocity;
+    currentVelocity -= deceleration;
+    drawWheel();
+    
+    if (currentVelocity > 0) {
+      wheelReqFrame = requestAnimationFrame(animate);
+    } else {
+      wheelSpinning = false;
+      const sliceAngle = (2 * Math.PI) / pickerPool.length;
+      const normalizedAngle = (wheelAngle % (2 * Math.PI)); 
+      
+      let topAngle = (1.5 * Math.PI - normalizedAngle) % (2 * Math.PI);
+      if (topAngle < 0) topAngle += 2 * Math.PI;
+      const winnerIdx = Math.floor(topAngle / sliceAngle);
+      
+      const winnerName = pickerPool[winnerIdx];
+      showWinnerGroup(winnerName, winnerIdx);
+    }
+  }
+  
+  // Inject a temporary canvas overlay over groups
+  if (!document.getElementById('groups-spin-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.id = 'groups-spin-overlay';
+    overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.8); z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center;';
+    overlay.innerHTML = `
+      <div style="color:#fff; font-size:2rem; font-family:'Outfit', sans-serif; font-weight:700; margin-bottom:1rem; letter-spacing:2px;">SPINNING...</div>
+      <div style="position:relative; width:500px; height:500px;">
+        <div style="position:absolute; top:-20px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:25px solid transparent; border-right:25px solid transparent; border-top:40px solid var(--red); z-index:10;"></div>
+        <canvas id="groups-wheel-canvas" width="500" height="500"></canvas>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+  
+  // Custom drawWheel for the overlay
+  function drawWheel() {
+    const canvas = document.getElementById('groups-wheel-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = cx - 10;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const sliceAngle = (2 * Math.PI) / pickerPool.length;
+    
+    for (let i = 0; i < pickerPool.length; i++) {
+      const startAngle = wheelAngle + (i * sliceAngle);
+      const endAngle = startAngle + sliceAngle;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, radius, startAngle, endAngle);
+      ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(startAngle + sliceAngle / 2);
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#fff";
+      ctx.font = pickerPool.length > 30 ? "12px sans-serif" : "16px sans-serif";
+      let text = pickerPool[i];
+      if (text.length > 20) text = text.substring(0, 18) + "...";
+      ctx.fillText(text, radius - 15, 5);
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, 15, 0, 2*Math.PI);
+    ctx.fillStyle = "#222";
+    ctx.fill();
+  }
+  
+  animate();
+}
+
+function showWinnerGroup(winnerName, winnerIdx) {
+  const overlay = document.getElementById('groups-spin-overlay');
+  
+  // Find smallest group
+  let minStudents = 9999;
+  let minIdx = 0;
+  for (let i = 0; i < currentGroups.length; i++) {
+    if (currentGroups[i].students.length < minStudents) {
+      minStudents = currentGroups[i].students.length;
+      minIdx = i;
+    }
+  }
+  
+  overlay.innerHTML = `
+    <div style="background:var(--surface); padding:3rem; border-radius:1rem; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.8); border:2px solid var(--accent);">
+      <div style="color:var(--accent); font-weight:700; letter-spacing:2px; margin-bottom:0.5rem;">STUDENT DRAWN</div>
+      <div style="font-size:3rem; font-weight:800; margin-bottom:1.5rem; color:#fff; font-family:'Outfit', sans-serif;">${escapeHTML(winnerName)}</div>
+      <div style="color:var(--muted); font-size:1.1rem; margin-bottom:2rem;">Assigned to <strong style="color:var(--text);">${escapeHTML(currentGroups[minIdx].name)}</strong></div>
+      <button class="btn btn-primary" onclick="acceptGroupWinner(${winnerIdx}, ${minIdx})" style="font-size:1.2rem; padding:1rem 3rem; border-radius:50px;">✔ Continue</button>
+    </div>
+  `;
+}
+
+window.acceptGroupWinner = function(studentIdx, groupIdx) {
+  const overlay = document.getElementById('groups-spin-overlay');
+  if (overlay) overlay.remove();
+  
+  const student = unassignedPool.splice(studentIdx, 1)[0];
+  currentGroups[groupIdx].students.push(student);
+  
+  renderUnassigned();
+  renderGroups();
+  
+  if (unassignedPool.length > 0) {
+    // Optionally trigger another spin automatically? 
+    // Wait for user to click Spin again for better UX.
+  }
+}
+
+function toggleEditGroups() {
+  groupsEditMode = !groupsEditMode;
+  renderGroups();
+  showToast(groupsEditMode ? "✏️ Edit Mode ON" : "🔒 Edit Mode OFF");
 }
 
 function renderGroups() {
   const container = document.getElementById('groups-container');
   container.innerHTML = currentGroups.map((g, gidx) => `
-    <div class="group-card" ondragover="allowDrop(event)" ondrop="drop(event, ${gidx})">
+    <div class="group-card ${groupsEditMode ? 'edit-mode' : ''}" ondragover="allowDrop(event)" ondrop="drop(event, ${gidx})">
       <div class="group-header">
         <input type="text" class="group-name-input" value="${escapeHTML(g.name)}" 
-               onchange="updateGroupName(${gidx}, this.value)" />
+               onchange="updateGroupName(${gidx}, this.value)" ${!groupsEditMode ? 'readonly' : ''} />
       </div>
       <div class="group-list">
         ${g.students.map((s, sidx) => `
-          <div class="group-student" draggable="true" ondragstart="drag(event, ${gidx}, ${sidx})">
+          <div class="group-student" draggable="${groupsEditMode ? 'true' : 'false'}" ondragstart="drag(event, ${gidx}, ${sidx})">
             ${escapeHTML(s)}
+            ${groupsEditMode ? `<button class="remove-btn" onclick="removeStudentFromGroup(${gidx}, ${sidx})" title="Remove">✕</button>` : ''}
           </div>
         `).join('')}
       </div>
@@ -205,13 +421,23 @@ function renderGroups() {
   `).join('');
 }
 
+window.removeStudentFromGroup = function(gidx, sidx) {
+  const student = currentGroups[gidx].students.splice(sidx, 1)[0];
+  unassignedPool.push(student);
+  renderGroups();
+  renderUnassigned();
+}
+
 function updateGroupName(gidx, newName) {
-  if (currentGroups[gidx]) {
-    currentGroups[gidx].name = newName;
-  }
+  if (currentGroups[gidx]) currentGroups[gidx].name = newName;
 }
 
 // Drag and drop logic
+function dragUnassigned(ev, studentIdx) {
+  ev.dataTransfer.setData("fromUnassigned", "1");
+  ev.dataTransfer.setData("studentIdx", studentIdx);
+}
+
 function allowDrop(ev) {
   ev.preventDefault();
 }
@@ -224,9 +450,15 @@ function drag(ev, fromGroupIdx, studentIdx) {
 function drop(ev, toGroupIdx) {
   ev.preventDefault();
   const fromGroup = ev.dataTransfer.getData("fromGroup");
+  const fromUnassigned = ev.dataTransfer.getData("fromUnassigned");
   const studentIdx = ev.dataTransfer.getData("studentIdx");
   
-  if (fromGroup !== "" && fromGroup != toGroupIdx) {
+  if (fromUnassigned === "1") {
+    const student = unassignedPool.splice(studentIdx, 1)[0];
+    currentGroups[toGroupIdx].students.push(student);
+    renderUnassigned();
+    renderGroups();
+  } else if (fromGroup !== "" && fromGroup != toGroupIdx) {
     const student = currentGroups[fromGroup].students.splice(studentIdx, 1)[0];
     currentGroups[toGroupIdx].students.push(student);
     renderGroups();
@@ -237,20 +469,29 @@ async function saveGroups() {
   if (currentGroups.length === 0) return;
   const classId = document.getElementById('group-class-select').value;
   
+  // Save locally first for offline
   try {
-    const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'groups');
-    // Fetch existing
-    let existing = {};
-    const snap = await window._firestoreGetDoc(ref);
-    if (snap.exists) existing = snap.data().classes || {};
-    
-    existing[classId] = currentGroups;
-    
-    await window._firestoreSetDoc(ref, { classes: existing }, { merge: true });
-    showToast("✅ Groups saved to Cloud!");
-  } catch (err) {
-    console.error(err);
-    showToast("⚠️ Could not save to Cloud. (Are you online?)");
+    let localData = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+    localData[classId] = currentGroups;
+    localStorage.setItem('gv_groups', JSON.stringify(localData));
+    showToast("💾 Saved locally.");
+  } catch(e) {}
+  
+  // Try online sync
+  if (_db) {
+    try {
+      const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'groups');
+      let existing = {};
+      const snap = await window._firestoreGetDoc(ref);
+      if (snap.exists) existing = snap.data().classes || {};
+      
+      existing[classId] = currentGroups;
+      await window._firestoreSetDoc(ref, { classes: existing }, { merge: true });
+      showToast("✅ Groups synced to Cloud!");
+    } catch (err) {
+      console.error(err);
+      showToast("⚠️ Offline: Groups saved locally only.");
+    }
   }
 }
 
@@ -477,28 +718,40 @@ async function savePickerScore() {
     return;
   }
   
+  const entry = {
+    classId,
+    student,
+    category,
+    score: parseFloat(score),
+    date: new Date().toISOString()
+  };
+  
+  // Save locally first
   try {
-    const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'scores');
-    let existing = [];
-    const snap = await window._firestoreGetDoc(ref);
-    if (snap.exists) existing = snap.data().entries || [];
-    
-    existing.push({
-      classId,
-      student,
-      category,
-      score: parseFloat(score),
-      date: new Date().toISOString()
-    });
-    
-    await window._firestoreSetDoc(ref, { entries: existing }, { merge: true });
-    showToast("✅ Score saved to Cloud!");
-    
-    // Clear input
-    document.getElementById('picker-score-value').value = '';
-    
-  } catch (err) {
-    console.error(err);
-    showToast("⚠️ Could not save score. (Are you online?)");
+    let localScores = JSON.parse(localStorage.getItem('gv_scores') || '[]');
+    localScores.push(entry);
+    localStorage.setItem('gv_scores', JSON.stringify(localScores));
+    showToast("💾 Score saved locally.");
+  } catch(e) {}
+  
+  if (_db) {
+    try {
+      const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'scores');
+      let existing = [];
+      const snap = await window._firestoreGetDoc(ref);
+      if (snap.exists) existing = snap.data().entries || [];
+      
+      existing.push(entry);
+      
+      await window._firestoreSetDoc(ref, { entries: existing }, { merge: true });
+      showToast("✅ Score synced to Cloud!");
+      
+      // Clear input
+      document.getElementById('picker-score-value').value = '';
+      
+    } catch (err) {
+      console.error(err);
+      showToast("⚠️ Offline: Score saved locally only.");
+    }
   }
 }

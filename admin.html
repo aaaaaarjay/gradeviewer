@@ -245,9 +245,12 @@
 
       <!-- ── GROUPS PAGE ── -->
       <div class="admin-page" id="page-groups">
-        <div class="page-header">
-          <div class="page-title">🧩 Groups Manager</div>
-          <div class="page-sub">Create and manage randomized student groups for activities.</div>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">🧩 Groups Manager</div>
+            <div class="page-sub">Create and manage randomized student groups for activities.</div>
+          </div>
+          <button class="btn btn-ghost" onclick="toggleFullscreen('page-groups')" title="Toggle Fullscreen">⛶</button>
         </div>
         
         <!-- Controls -->
@@ -273,20 +276,36 @@
             </div>
             <div class="panel-body">
               <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1.5rem;">
-                <div style="display:flex; align-items:center; gap:0.5rem;">
-                  <label>Divide into:</label>
-                  <input type="number" id="group-count-input" class="form-input" style="width:70px;" min="2" max="20" value="5" />
-                  <select id="group-mode-select" class="form-input" style="width:auto;">
+                <div style="display:flex; align-items:center; gap:0.5rem; background:var(--surface2); padding:0.5rem; border-radius:8px;">
+                  <label style="font-size:0.85rem; color:var(--muted);">Divide into:</label>
+                  <input type="number" id="group-count-input" class="form-input" style="width:70px; padding:0.3rem;" min="2" max="20" value="5" />
+                  <select id="group-mode-select" class="form-input" style="width:auto; padding:0.3rem;">
                     <option value="groups">Groups</option>
-                    <option value="members">Members per group</option>
+                    <option value="members">Members/group</option>
                   </select>
+                  <button class="btn btn-primary btn-sm" onclick="initGroups()">Set Up</button>
                 </div>
-                <button class="btn btn-primary" onclick="randomizeGroups()">🎲 Randomize</button>
-                <button class="btn btn-ghost" onclick="saveGroups()">💾 Save Groups</button>
+                
+                <button class="btn btn-primary" id="btn-spin-group" onclick="spinToAssignGroup()" style="display:none;">🎡 Spin to Assign</button>
+                <button class="btn btn-ghost" id="btn-add-group" onclick="addGroupBox()" style="display:none;">➕ Add Group Box</button>
+                <div style="flex:1"></div>
+                <button class="btn btn-ghost" onclick="toggleEditGroups()">✏️ Edit Groups</button>
+                <button class="btn btn-primary" onclick="saveGroups()">💾 Save Groups</button>
+              </div>
+
+              <!-- Unassigned Pool -->
+              <div id="unassigned-pool" class="hidden" style="margin-bottom: 2rem; border:1px solid var(--border); padding:1rem; border-radius:8px; background:rgba(0,0,0,0.2);">
+                <div style="font-size:0.85rem; font-weight:700; color:var(--muted); margin-bottom:0.75rem; display:flex; justify-content:space-between;">
+                  <span>UNASSIGNED STUDENTS (<span id="unassigned-count">0</span>)</span>
+                  <button class="btn btn-primary btn-sm" onclick="randomizeRemaining()">🎲 Auto-Assign All</button>
+                </div>
+                <div id="unassigned-list" style="display:flex; flex-wrap:wrap; gap:0.5rem; max-height:200px; overflow-y:auto;">
+                  <!-- rendered by JS -->
+                </div>
               </div>
 
               <!-- Group Cards Container -->
-              <div id="groups-container" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:1rem;">
+              <div id="groups-container" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:1rem;">
                 <!-- rendered by JS -->
               </div>
             </div>
@@ -296,9 +315,12 @@
 
       <!-- ── RANDOM PICKER PAGE ── -->
       <div class="admin-page" id="page-picker">
-        <div class="page-header">
-          <div class="page-title">🎰 Random Picker</div>
-          <div class="page-sub">Pick random students for oral recitation.</div>
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">🎰 Random Picker</div>
+            <div class="page-sub">Pick random students for oral recitation.</div>
+          </div>
+          <button class="btn btn-ghost" onclick="toggleFullscreen('page-picker')" title="Toggle Fullscreen">⛶</button>
         </div>
 
         <div class="panel">
