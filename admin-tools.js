@@ -179,6 +179,46 @@ async function loadClassForGroups() {
   `;
 }
 
+// Instant auto-randomize (original behaviour) — no spin
+function randomizeGroupsAuto() {
+  if (currentStudents.length === 0) {
+    showToast('❌ Load students first.');
+    return;
+  }
+
+  const count = parseInt(document.getElementById('group-count-input').value) || 5;
+  const mode  = document.getElementById('group-mode-select').value;
+
+  const shuffled = [...currentStudents].sort(() => Math.random() - 0.5);
+  currentGroups  = [];
+  unassignedPool = [];
+
+  let numGroups = count;
+  if (mode === 'members') numGroups = Math.ceil(shuffled.length / count);
+
+  for (let i = 0; i < numGroups; i++) {
+    currentGroups.push({ id: 'group_' + i, name: 'Group ' + (i + 1), students: [] });
+  }
+
+  shuffled.forEach((student, idx) => {
+    currentGroups[idx % numGroups].students.push(student);
+  });
+
+  // Show group action buttons
+  document.getElementById('unassigned-pool').classList.add('hidden');
+  document.getElementById('btn-spin-group').style.display = 'none';
+  document.getElementById('btn-add-group').style.display  = 'inline-flex';
+
+  groupsEditMode = false;
+  renderGroups();
+  document.getElementById('groups-workspace').classList.remove('hidden');
+
+  const cls = classList.find(c => c.id === document.getElementById('group-class-select').value);
+  if (cls) document.getElementById('groups-class-name').textContent = cls.name;
+  document.getElementById('groups-student-count').textContent =
+    `${currentStudents.length} students — ${numGroups} groups`;
+}
+
 // Sets up empty group cards and puts everyone in unassigned pool
 function initGroups() {
   if (currentStudents.length === 0) return;
