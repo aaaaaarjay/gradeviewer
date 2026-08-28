@@ -47,4 +47,4 @@ const rows = [
   ['ALLERA, MIKE DAVE R.', '2414302']
 ];
 
-console.log('Result:', parseStudentIdSheet(rows)); s
+console.log('Result:', parseStudentIdSheet(rows));
