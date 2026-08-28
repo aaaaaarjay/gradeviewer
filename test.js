@@ -26,25 +26,25 @@ function parseStudentIdSheet(rows) {
     }
   }
   if (headerRow < 0) headerRow = 0;
-  
+
   for (let r = headerRow + 1; r < rows.length; r++) {
-      const row = rows[r];
-      const name = String(row[nameCol] || '').trim();
-      const id = String(row[idCol] || '').trim();
-      if (name && !isHeader(name) && !isNumeric(name) && id) {
-          result[normalise(name)] = id;
-      }
+    const row = rows[r];
+    const name = String(row[nameCol] || '').trim();
+    const id = String(row[idCol] || '').trim();
+    if (name && !isHeader(name) && !isNumeric(name) && id) {
+      result[normalise(name)] = id;
+    }
   }
   return result;
 }
 
 const rows = [
-    [],
-    ['Student Name', 'StudentID'],
-    ['ABAD, JUVIE ANN C.', '2517107'],
-    ['ABELLA, JAMES ANDREW L.', '2517113'],
-    ['ALFEREZ, HANNAH MAY REY', '2211355'],
-    ['ALLERA, MIKE DAVE R.', '2414302']
+  [],
+  ['Student Name', 'StudentID'],
+  ['ABAD, JUVIE ANN C.', '2517107'],
+  ['ABELLA, JAMES ANDREW L.', '2517113'],
+  ['ALFEREZ, HANNAH MAY REY', '2211355'],
+  ['ALLERA, MIKE DAVE R.', '2414302']
 ];
 
-console.log('Result:', parseStudentIdSheet(rows));
+console.log('Result:', parseStudentIdSheet(rows)); s
