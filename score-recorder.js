@@ -4,7 +4,7 @@
 
 const SCORES_KEY     = 'gv_scores';
 const GRADEBOOK_KEY  = 'gv_gradebook';
-const GSHEETS_ID_KEY = 'gv_gsheets_client_id';
+const SCRIPT_URL_KEY = 'gv_gsheets_script_url';
 const SHEET_MAP_KEY  = 'gv_sheet_mapping';
 
 /* ─── CATEGORY DEFINITIONS ─── */
@@ -38,16 +38,15 @@ document.getElementById('nav-scores').addEventListener('click', () => {
   hf.innerHTML = '<option value="">All Classes</option>' +
     classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
 
-  // Set origin display in settings
+  // Set origin display in settings (not needed anymore for apps script but keep if used elsewhere)
   const od = document.getElementById('settings-origin-display');
   if (od) od.textContent = window.location.origin;
 
-  // Load saved client ID
-  const cid = localStorage.getItem(GSHEETS_ID_KEY) || '';
-  const cidInput = document.getElementById('gsheets-client-id-input');
-  if (cidInput && cid) cidInput.value = cid;
+  // Load saved script URL
+  const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY) || '';
+  const urlInput = document.getElementById('gsheets-script-url-input');
+  if (urlInput && scriptUrl) urlInput.value = scriptUrl;
 
-  // Update GSheets connect button state
   updateGSheetsUI();
   renderScoreHistory();
 });
@@ -96,9 +95,10 @@ async function loadClassForScores() {
     infoEl.classList.remove('hidden');
   }
 
-  // Show GSheets map button if connected
+  // Show GSheets map button if script URL is saved
   const mapBtn = document.getElementById('scores-gsheets-map-btn');
-  if (mapBtn && gsheetsToken) mapBtn.style.display = 'inline-flex';
+  const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY);
+  if (mapBtn && scriptUrl) mapBtn.style.display = 'inline-flex';
 
   document.getElementById('scores-workspace').classList.remove('hidden');
   currentCat = 'Quiz';
@@ -340,8 +340,8 @@ async function saveGradebook() {
     }
   }
 
-  // Write to Google Sheets if connected
-  if (gsheetsToken) {
+  // Write to Google Sheets via Apps Script if configured
+  if (localStorage.getItem(SCRIPT_URL_KEY)) {
     writeGradebookToSheet();
   }
 
@@ -349,89 +349,39 @@ async function saveGradebook() {
 }
 
 /* ════════════════════════════════════════════════
-   GOOGLE SHEETS OAUTH
+   GOOGLE SHEETS APPS SCRIPT
    ════════════════════════════════════════════════ */
 
-let gsheetsToken    = null; // Access token
-let gsheetsClient   = null; // Google OAuth client instance
-
-function saveGSheetsClientId() {
-  const val = document.getElementById('gsheets-client-id-input').value.trim();
-  if (!val) { showToast('❌ Please enter a Client ID.'); return; }
-  localStorage.setItem(GSHEETS_ID_KEY, val);
-  showToast('✅ Client ID saved. Click "Test Connection" to connect.');
+function saveGSheetsScriptUrl() {
+  const val = document.getElementById('gsheets-script-url-input').value.trim();
+  if (!val) { showToast('❌ Please enter a Web App URL.'); return; }
+  localStorage.setItem(SCRIPT_URL_KEY, val);
+  showToast('✅ Web App URL saved!');
   document.getElementById('gsheets-settings-status').innerHTML =
-    '<span style="color:var(--green);">✅ Client ID saved.</span>';
+    '<span style="color:var(--green);">✅ Saved. Auto-sync is active.</span>';
 }
 
 function updateGSheetsUI() {
+  const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY);
   const pill       = document.getElementById('gsheets-status-pill');
-  const connectBtn = document.getElementById('gsheets-connect-btn');
+  const connectBtn = document.getElementById('gsheets-connect-btn'); // reusing button ID
 
-  if (gsheetsToken) {
+  if (scriptUrl) {
     if (pill) { pill.classList.remove('hidden'); pill.style.display = 'flex'; }
-    if (connectBtn) connectBtn.textContent = '🔓 Disconnect Sheets';
+    if (connectBtn) connectBtn.style.display = 'none'; // No connect needed for Apps Script
   } else {
     if (pill) pill.classList.add('hidden');
-    if (connectBtn) connectBtn.textContent = '🔗 Connect Sheets';
+    if (connectBtn) {
+      connectBtn.style.display = 'inline-flex';
+      connectBtn.textContent = '❌ Sheets not configured';
+      connectBtn.onclick = () => showPage('settings');
+    }
   }
 }
 
+// Remove old OAuth functions
 function connectGoogleSheets() {
-  if (gsheetsToken) {
-    // Disconnect
-    gsheetsToken  = null;
-    gsheetsClient = null;
-    updateGSheetsUI();
-    showToast('🔌 Disconnected from Google Sheets.');
-    return;
-  }
-  const clientId = localStorage.getItem(GSHEETS_ID_KEY);
-  if (!clientId) {
-    showToast('❌ No Client ID found. Go to Settings → Google Sheets Integration first.');
-    return;
-  }
-  initGSheetsOAuth(clientId);
-}
-
-function testGoogleSheetsConnection() {
-  const clientId = document.getElementById('gsheets-client-id-input').value.trim();
-  if (!clientId) { showToast('❌ Enter a Client ID first.'); return; }
-  localStorage.setItem(GSHEETS_ID_KEY, clientId);
-  initGSheetsOAuth(clientId);
-}
-
-function initGSheetsOAuth(clientId) {
-  if (typeof google === 'undefined' || !google.accounts) {
-    showToast('❌ Google Identity Services not loaded yet. Try again in a moment.');
-    return;
-  }
-
-  gsheetsClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    callback: (tokenResponse) => {
-      if (tokenResponse.error) {
-        console.error(tokenResponse);
-        showToast('❌ OAuth failed: ' + tokenResponse.error);
-        const statusEl = document.getElementById('gsheets-settings-status');
-        if (statusEl) statusEl.innerHTML = `<span style="color:var(--red);">❌ Error: ${tokenResponse.error}</span>`;
-        return;
-      }
-      gsheetsToken = tokenResponse.access_token;
-      updateGSheetsUI();
-      showToast('✅ Connected to Google Sheets!');
-
-      const statusEl = document.getElementById('gsheets-settings-status');
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--green);">✅ Connected successfully!</span>';
-
-      // Show map button if class is loaded
-      const mapBtn = document.getElementById('scores-gsheets-map-btn');
-      if (mapBtn && currentClassId) mapBtn.style.display = 'inline-flex';
-    },
-  });
-
-  gsheetsClient.requestAccessToken();
+  showPage('settings');
 }
 
 /* ─── SHEET MAPPING ─── */
@@ -477,9 +427,10 @@ function saveSheetMapping() {
   showToast('✅ Sheet mapping saved!');
 }
 
-/* ─── WRITE TO GOOGLE SHEETS ─── */
+/* ─── WRITE TO GOOGLE SHEETS VIA APPS SCRIPT ─── */
 async function writeGradebookToSheet() {
-  if (!gsheetsToken) { showToast('❌ Not connected to Google Sheets.'); return; }
+  const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY);
+  if (!scriptUrl) return;
 
   const cls = classList.find(c => c.id === currentClassId);
   if (!cls) return;
@@ -490,7 +441,6 @@ async function writeGradebookToSheet() {
   const mapping = JSON.parse(localStorage.getItem(SHEET_MAP_KEY) || '{}');
   const classMapping = mapping[currentClassId] || {};
 
-  // For each category that has a mapped tab
   let writeCount = 0;
 
   for (const cat of CATEGORIES) {
@@ -500,123 +450,48 @@ async function writeGradebookToSheet() {
     const catData = gradebookData[cat.id];
     if (!catData) continue;
 
-    // Fetch existing sheet data to find student rows
+    // Prepare payload for Apps Script
+    const payload = {
+      sheetId: sheetId,
+      tabName: tabName,
+      headers: catData.cols.map(c => c.name),
+      maxScores: catData.cols.map(c => c.max || ''),
+      studentScores: {}
+    };
+
+    scoresStudents.forEach(student => {
+      payload.studentScores[student.trim().toUpperCase()] = catData.rows[student] || Array(catData.cols.length).fill('');
+    });
+
     try {
-      const rangeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(tabName)}`;
-      const fetchResp = await fetch(rangeUrl, {
-        headers: { Authorization: `Bearer ${gsheetsToken}` }
+      // Send as plain text to avoid CORS OPTIONS preflight block in Apps Script
+      const fetchResp = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
       });
 
       if (!fetchResp.ok) {
-        const err = await fetchResp.json();
-        console.warn('Sheet fetch error:', err);
+        console.warn('Apps Script write error');
         continue;
       }
-
-      const sheetData = await fetchResp.json();
-      const rows = sheetData.values || [];
-
-      // Find header row — look for a row containing student names
-      // Find the column with student names and the last used column
-      // Strategy: find the name column by looking for our students
-      let nameCol = -1;
-      let headerRow = -1;
-
-      for (let ri = 0; ri < rows.length && ri < 5; ri++) {
-        const row = rows[ri] || [];
-        for (let ci = 0; ci < row.length; ci++) {
-          const cell = String(row[ci] || '').trim().toLowerCase();
-          if (cell === 'name' || cell === "student's name" || cell === 'student name') {
-            nameCol = ci;
-            headerRow = ri;
-            break;
-          }
-        }
-        if (nameCol >= 0) break;
-      }
-
-      if (nameCol < 0) {
-        // Fallback: first column with student names
-        nameCol = 0;
-        headerRow = 0;
-      }
-
-      // Find which row each student is on
-      const studentRowMap = {};
-      rows.forEach((row, ri) => {
-        const name = String(row[nameCol] || '').trim().toUpperCase();
-        if (name && ri > headerRow) {
-          studentRowMap[name] = ri;
-        }
-      });
-
-      // Determine the next empty column after the current data
-      const headerRowData = rows[headerRow] || [];
-      const startColIdx = headerRowData.length; // append after last column
-
-      // Build batch update requests
-      const valueRanges = [];
-
-      // Write column headers (activity names)
-      const headerValues = catData.cols.map(c => c.name);
-      const headerRange  = `${tabName}!${colIndexToLetter(startColIdx)}${headerRow + 1}:${colIndexToLetter(startColIdx + catData.cols.length - 1)}${headerRow + 1}`;
-      valueRanges.push({ range: headerRange, values: [headerValues] });
-
-      // Write max scores row (row after header)
-      const maxValues = catData.cols.map(c => c.max || '');
-      const maxRange  = `${tabName}!${colIndexToLetter(startColIdx)}${headerRow + 2}:${colIndexToLetter(startColIdx + catData.cols.length - 1)}${headerRow + 2}`;
-      valueRanges.push({ range: maxRange, values: [maxValues] });
-
-      // Write each student's scores
-      scoresStudents.forEach(student => {
-        const normStudent = student.trim().toUpperCase();
-        const ri = studentRowMap[normStudent];
-        if (ri === undefined) return; // Student not found in sheet
-
-        const scores = catData.rows[student] || Array(catData.cols.length).fill('');
-        const scoreRange = `${tabName}!${colIndexToLetter(startColIdx)}${ri + 1}:${colIndexToLetter(startColIdx + catData.cols.length - 1)}${ri + 1}`;
-        valueRanges.push({ range: scoreRange, values: [scores] });
-      });
-
-      // Batch update
-      const updateResp = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchUpdate`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${gsheetsToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            valueInputOption: 'RAW',
-            data: valueRanges,
-          }),
-        }
-      );
-
-      if (updateResp.ok) {
+      
+      const result = await fetchResp.json();
+      if (result.success) {
         writeCount++;
       } else {
-        const err = await updateResp.json();
-        console.warn('Sheet write error for', cat.id, ':', err);
-        // Token may have expired
-        if (err?.error?.code === 401) {
-          gsheetsToken = null;
-          updateGSheetsUI();
-          showToast('⚠️ Google Sheets session expired. Please reconnect.');
-          return;
-        }
+        console.warn('Apps Script error:', result.error);
+        showToast('❌ Sheet sync error: ' + result.error);
       }
-
     } catch (err) {
-      console.error('Sheets write error:', err);
+      console.error('Fetch error:', err);
     }
   }
 
   if (writeCount > 0) {
-    showToast(`✅ Written to ${writeCount} sheet tab(s) automatically!`);
+    showToast(`✅ Auto-synced to ${writeCount} sheet tab(s)!`);
   } else {
-    showToast('⚠️ Saved locally. No sheet tabs were mapped or reachable.');
+    showToast('⚠️ Saved locally. No sheet tabs mapped or sync failed.');
   }
 }
 

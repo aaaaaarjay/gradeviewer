@@ -405,29 +405,20 @@
           </div>
         </div>
 
-        <!-- Google Sheets OAuth -->
+        <!-- Google Apps Script Integration -->
         <div class="panel">
           <div class="panel-header">
-            <div class="panel-title">🔗 Google Sheets Integration</div>
+            <div class="panel-title">🔗 Google Sheets Auto-Sync (Apps Script)</div>
           </div>
           <div class="panel-body">
-            <div style="background:rgba(108,99,255,0.07); border:1px solid rgba(108,99,255,0.2); border-radius:8px; padding:1rem; margin-bottom:1rem; font-size:0.85rem; color:var(--muted); line-height:1.6;">
-              <strong style="color:var(--text);">Setup Instructions:</strong><br>
-              1. Go to <a href="https://console.cloud.google.com/" target="_blank" style="color:var(--accent);">Google Cloud Console</a><br>
-              2. Create a project → Enable <strong>Google Sheets API</strong><br>
-              3. Go to Credentials → Create <strong>OAuth 2.0 Client ID</strong> (Web application)<br>
-              4. Add <strong><span id="settings-origin-display"></span></strong> as an Authorized JavaScript origin<br>
-              5. Paste your Client ID below and click Save
-            </div>
             <div class="add-form-grid">
               <div class="form-group full">
-                <label class="form-label">Google OAuth Client ID</label>
-                <input type="text" id="gsheets-client-id-input" class="form-input" placeholder="xxxxxxxxxx.apps.googleusercontent.com" />
+                <label class="form-label">Apps Script Web App URL</label>
+                <input type="text" id="gsheets-script-url-input" class="form-input" placeholder="https://script.google.com/macros/s/xxxxxxxxxx/exec" />
               </div>
             </div>
             <div class="form-actions">
-              <button class="btn btn-ghost" onclick="testGoogleSheetsConnection()">🔌 Test Connection</button>
-              <button class="btn btn-primary" onclick="saveGSheetsClientId()">Save Client ID</button>
+              <button class="btn btn-primary" onclick="saveGSheetsScriptUrl()">Save Web App URL</button>
             </div>
             <div id="gsheets-settings-status" style="margin-top:0.75rem; font-size:0.85rem;"></div>
           </div>
@@ -633,9 +624,6 @@
 
   <!-- SheetJS for reading Excel in Admin -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-
-  <!-- Google Identity Services (for Sheets OAuth) -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script src="admin.js"></script>
   <script src="admin-tools.js"></script>
