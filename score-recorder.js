@@ -390,7 +390,54 @@ function deleteScoreEntry(id, fallbackIdx) {
     entries.splice(fallbackIdx, 1);
   }
   localStorage.setItem(SCORES_KEY, JSON.stringify(entries));
+  
+  // Sync deletion to Firebase
+  if (typeof _db !== 'undefined' && _db) {
+    try {
+      const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'scores');
+      window._firestoreSetDoc(ref, { entries: entries }); // no await needed, just fire and forget
+    } catch(err) {}
+  }
+  
   showToast('🗑️ Score deleted.');
+  renderScoreHistory();
+}
+
+async function deleteAllScores() {
+  const filterClassId = document.getElementById('history-class-filter')?.value || '';
+  
+  let msg = 'Are you sure you want to delete ALL score history forever?';
+  if (filterClassId) {
+    const cls = classList.find(c => c.id === filterClassId);
+    msg = `Are you sure you want to delete all score history for ${cls?.name || 'this class'}?`;
+  }
+  
+  if (!confirm(msg)) return;
+  
+  let entries = getAllScores();
+  
+  if (filterClassId) {
+    // Keep entries not matching the filter
+    entries = entries.filter(e => e.classId !== filterClassId);
+  } else {
+    // Wipe everything
+    entries = [];
+  }
+  
+  // Save to local
+  localStorage.setItem(SCORES_KEY, JSON.stringify(entries));
+  
+  // Sync wipe to Firebase
+  if (typeof _db !== 'undefined' && _db) {
+    try {
+      const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'scores');
+      await window._firestoreSetDoc(ref, { entries: entries });
+    } catch(err) {
+      console.warn('Cloud wipe failed:', err);
+    }
+  }
+  
+  showToast('🗑️ History deleted.');
   renderScoreHistory();
 }
 

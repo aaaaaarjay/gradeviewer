@@ -280,11 +280,12 @@
         <div class="panel" style="margin-top:2rem;">
           <div class="panel-header">
             <div class="panel-title">📋 Score History</div>
-            <div style="display:flex; gap:0.5rem;">
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
               <select id="history-class-filter" class="form-input" style="font-size:0.8rem; padding:0.3rem;" onchange="renderScoreHistory()">
                 <option value="">All Classes</option>
               </select>
               <button class="btn btn-ghost btn-sm" onclick="exportScoresCSV()">⬇️ Export CSV</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteAllScores()">🗑️ Delete All</button>
               <button class="btn btn-ghost btn-sm" onclick="renderScoreHistory()">🔄 Refresh</button>
             </div>
           </div>
