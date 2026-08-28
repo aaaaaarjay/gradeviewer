@@ -161,6 +161,28 @@ function setAllScores() {
   if (scoresCurrentTab === 'group') renderGroupScoring();
 }
 
+function copyScoresColumn() {
+  if (scoresStudents.length === 0) {
+    showToast('❌ No students loaded.');
+    return;
+  }
+  
+  // Format as a single column of scores matching the alphabetical list of students
+  // Just TSV with one column
+  let tsv = "";
+  scoresStudents.forEach(s => {
+    const val = scoresInputMap[s] ?? '';
+    tsv += `${val}\n`;
+  });
+  
+  navigator.clipboard.writeText(tsv).then(() => {
+    showToast('📋 Copied! Paste directly into your Sheet column.');
+  }).catch(err => {
+    console.error(err);
+    showToast('❌ Failed to copy to clipboard.');
+  });
+}
+
 /* ─── GROUP TAB ─── */
 function renderGroupScoring() {
   const classId = document.getElementById('scores-class-select').value;

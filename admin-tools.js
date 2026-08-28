@@ -167,16 +167,49 @@ async function loadClassForGroups() {
     return;
   }
 
-  const cls = classList.find(c => c.id === classId);
-  document.getElementById('groups-class-name').textContent = cls.name;
-  document.getElementById('groups-student-count').textContent = `${currentStudents.length} students loaded`;
-  
+  // Show UI
   document.getElementById('groups-workspace').classList.remove('hidden');
-  document.getElementById('groups-container').innerHTML = `
+  
+  // Update labels
+  const cls = classList.find(c => c.id === classId);
+  if (cls) {
+    document.getElementById('groups-class-name').textContent = cls.name;
+  }
+  document.getElementById('groups-student-count').textContent = currentStudents.length + ' students';
+  
+  // Try loading existing saved groups first
+  const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+  if (saved[classId] && saved[classId].length > 0) {
+    currentGroups = saved[classId];
+    
+    // Find unassigned students (those in currentStudents but not in any group)
+    const assignedSet = new Set();
+    currentGroups.forEach(g => g.students.forEach(s => assignedSet.add(s)));
+    unassignedPool = currentStudents.filter(s => !assignedSet.has(s));
+    
+    document.getElementById('unassigned-pool').classList.remove('hidden');
+    document.getElementById('btn-spin-group').style.display = unassignedPool.length ? 'inline-flex' : 'none';
+    document.getElementById('btn-add-group').style.display = 'inline-flex';
+    document.getElementById('btn-reset-group').style.display = 'inline-flex';
+    
+    groupsEditMode = false;
+    renderUnassigned();
+    renderGroups();
+    showToast(`✅ Loaded saved groups for ${cls?.name || 'class'}`);
+  } else {
+    // No saved groups, initialize empty
+    currentGroups = [];
+    unassignedPool = [...currentStudents];
+    document.getElementById('unassigned-pool').classList.add('hidden'); // Hide pool until Set Up is clicked
+    document.getElementById('btn-spin-group').style.display = 'none';
+    document.getElementById('btn-add-group').style.display = 'none';
+    document.getElementById('btn-reset-group').style.display = 'none';
+    document.getElementById('groups-container').innerHTML = `
     <div style="grid-column: 1/-1; text-align:center; padding: 2rem; color:var(--muted);">
       Ready! Choose how to divide them and click Randomize.
     </div>
   `;
+  }
 }
 
 // Instant auto-randomize (original behaviour) — no spin
@@ -208,6 +241,7 @@ function randomizeGroupsAuto() {
   document.getElementById('unassigned-pool').classList.add('hidden');
   document.getElementById('btn-spin-group').style.display = 'none';
   document.getElementById('btn-add-group').style.display  = 'inline-flex';
+  document.getElementById('btn-reset-group').style.display = 'inline-flex';
 
   groupsEditMode = false;
   renderGroups();
@@ -217,6 +251,18 @@ function randomizeGroupsAuto() {
   if (cls) document.getElementById('groups-class-name').textContent = cls.name;
   document.getElementById('groups-student-count').textContent =
     `${currentStudents.length} students — ${numGroups} groups`;
+}
+
+function resetGroups() {
+  if (!confirm("Are you sure you want to reset all groups? This cannot be undone unless you reload.")) return;
+  currentGroups = [];
+  unassignedPool = [...currentStudents];
+  document.getElementById('unassigned-pool').classList.add('hidden');
+  document.getElementById('btn-spin-group').style.display = 'none';
+  document.getElementById('btn-add-group').style.display = 'none';
+  document.getElementById('btn-reset-group').style.display = 'none';
+  document.getElementById('groups-container').innerHTML = '';
+  showToast("🔄 Groups reset. Click 'Set Up' or 'Randomize' to start over.");
 }
 
 // Sets up empty group cards and puts everyone in unassigned pool
@@ -240,10 +286,38 @@ function initGroups() {
   document.getElementById('unassigned-pool').classList.remove('hidden');
   document.getElementById('btn-spin-group').style.display = 'inline-flex';
   document.getElementById('btn-add-group').style.display = 'inline-flex';
+  document.getElementById('btn-reset-group').style.display = 'inline-flex';
   
   groupsEditMode = false; // Start in locked mode
   renderGroups();
   renderUnassigned();
+}
+
+// Copy groups to clipboard in TSV format (Spreadsheet ready)
+function copyGroupsForSheets() {
+  if (currentGroups.length === 0) {
+    showToast("❌ No groups to copy.");
+    return;
+  }
+  
+  // Format: Student Name \t Group Name
+  // Or Group Name \t Student Names (comma separated)
+  // Let's do a flat list matching the user's screenshot: All Students | Group Number | Group Members (implied by row)
+  // Better format: Group Name \t Student Name (one per row)
+  let tsv = "Group Name\tStudent Name\n";
+  currentGroups.forEach(g => {
+    if (g.students.length === 0) return;
+    g.students.forEach(s => {
+      tsv += `${g.name}\t${s}\n`;
+    });
+  });
+  
+  navigator.clipboard.writeText(tsv).then(() => {
+    showToast("📋 Copied! Paste it directly into Google Sheets.");
+  }).catch(err => {
+    console.error(err);
+    showToast("❌ Failed to copy to clipboard.");
+  });
 }
 
 function addGroupBox() {

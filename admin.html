@@ -223,11 +223,12 @@
         <div id="scores-workspace" class="hidden">
 
           <!-- Tabs: Individual / Group -->
-          <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn btn-primary" id="scores-tab-individual" onclick="switchScoresTab('individual')">👤 Individual</button>
             <button class="btn btn-ghost" id="scores-tab-group" onclick="switchScoresTab('group')">👥 Group Score</button>
             <div style="flex:1;"></div>
             <input type="text" id="scores-search" class="form-input" style="max-width:220px;" placeholder="🔍 Search student…" oninput="filterScoresTable()" />
+            <button class="btn btn-ghost" onclick="copyScoresColumn()" title="Copy scores to paste into Google Sheets">📋 Copy Column</button>
             <button class="btn btn-ghost" onclick="setAllScores()">✏️ Set All</button>
             <button class="btn btn-primary" onclick="saveAllScores()">💾 Save Scores</button>
           </div>
@@ -425,8 +426,10 @@
                 </div>
                 
                 <button class="btn btn-primary" id="btn-spin-group" onclick="spinToAssignGroup()" style="display:none;">🎡 Spin to Assign</button>
-                <button class="btn btn-ghost" id="btn-add-group" onclick="addGroupBox()" style="display:none;">➕ Add Group Box</button>
+                <button class="btn btn-ghost" id="btn-add-group" onclick="addGroupBox()" style="display:none;">➕ Add Group</button>
+                <button class="btn btn-danger" id="btn-reset-group" onclick="resetGroups()" style="display:none;">🔄 Reset</button>
                 <div style="flex:1"></div>
+                <button class="btn btn-ghost" onclick="copyGroupsForSheets()" title="Copy to paste into Google Sheets">📋 Copy for Sheets</button>
                 <button class="btn btn-ghost" onclick="toggleEditGroups()">✏️ Edit Groups</button>
                 <button class="btn btn-primary" onclick="saveGroups()">💾 Save Groups</button>
               </div>
