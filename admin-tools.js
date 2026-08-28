@@ -539,7 +539,8 @@ async function saveGroups() {
       const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'groups');
       let existing = {};
       const snap = await window._firestoreGetDoc(ref);
-      if (snap.exists) existing = snap.data().classes || {};
+      const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
+      if (exists) existing = snap.data().classes || {};
       
       existing[classId] = currentGroups;
       await window._firestoreSetDoc(ref, { classes: existing }, { merge: true });
@@ -795,7 +796,8 @@ async function savePickerScore() {
       const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'scores');
       let existing = [];
       const snap = await window._firestoreGetDoc(ref);
-      if (snap.exists) existing = snap.data().entries || [];
+      const exists = typeof snap.exists === 'function' ? snap.exists() : snap.exists;
+      if (exists) existing = snap.data().entries || [];
       
       existing.push(entry);
       
