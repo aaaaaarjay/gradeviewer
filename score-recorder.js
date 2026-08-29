@@ -4,6 +4,7 @@
 
 const SCORES_KEY     = 'gv_scores';
 const GRADEBOOK_KEY  = 'gv_gradebook';
+const PERIOD_DATA_KEY = 'gv_gradebook_by_period';
 const SCRIPT_URL_KEY = 'gv_gsheets_script_url';
 const SHEET_MAP_KEY  = 'gv_sheet_mapping';
 
@@ -12,19 +13,21 @@ const CATEGORIES = [
   { id: 'Quiz',     label: 'QUIZ',     emoji: '📄' },
   { id: 'Oral',     label: 'ORAL',     emoji: '🗣️' },
   { id: 'Activity', label: 'ACTIVITY', emoji: '✏️' },
-  { id: 'PT',       label: 'PERF. TASK',emoji: '🎭' },
-  { id: 'HW',       label: 'HOMEWORK', emoji: '📚' },
   { id: 'Exam',     label: 'EXAM',     emoji: '📋' },
-  { id: 'Seatwork', label: 'SEATWORK', emoji: '💺' },
-  { id: 'Project',  label: 'PROJECT',  emoji: '🏗️' },
 ];
 
-const DEFAULT_COLS = 5; // Default columns per category
+const MAX_COLS = 4;
+const DEFAULT_COLS = 4; // Four scores per category
+const PERIODS = ['Prelim', 'Midterm', 'Semifinal', 'Final'];
+const DEFAULT_PERIOD = 'Prelim';
 
 /* ─── STATE ─── */
 let scoresStudents   = [];
 let currentCat       = 'Quiz';
 let currentClassId   = '';
+let currentSheetTabName = '';
+const savedPeriod = localStorage.getItem('gv_current_period');
+let currentPeriod    = PERIODS.includes(savedPeriod) ? savedPeriod : DEFAULT_PERIOD;
 // gradebookData[classId][category] = { cols: [{name, max}], rows: {studentName: [val, val, ...]} }
 let gradebookData    = {};
 
@@ -33,10 +36,9 @@ document.getElementById('nav-scores').addEventListener('click', () => {
   const sel = document.getElementById('scores-class-select');
   sel.innerHTML = '<option value="">-- Select a Class --</option>' +
     classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
-
-  const hf = document.getElementById('history-class-filter');
-  hf.innerHTML = '<option value="">All Classes</option>' +
-    classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  sel.value = currentClassId || '';
+  const periodSelect = document.getElementById('scores-period-select');
+  if (periodSelect) periodSelect.value = currentPeriod;
 
   // Set origin display in settings (not needed anymore for apps script but keep if used elsewhere)
   const od = document.getElementById('settings-origin-display');
@@ -55,38 +57,79 @@ document.getElementById('nav-scores').addEventListener('click', () => {
 async function loadClassForScores() {
   currentClassId = document.getElementById('scores-class-select').value;
   document.getElementById('scores-workspace').classList.add('hidden');
-  if (!currentClassId) return;
+  if (!currentClassId) {
+    renderScoreHistory();
+    return;
+  }
 
   document.getElementById('scores-class-select').disabled = true;
   showToast('Loading students…');
 
-  scoresStudents = await fetchStudentsForClass(currentClassId);
+  const sheetGradebook = await fetchGradebookForClass(currentClassId, currentPeriod);
+  currentSheetTabName = sheetGradebook?.sheetName || currentPeriod;
+  scoresStudents = sheetGradebook?.students || await fetchStudentsForClass(currentClassId);
   document.getElementById('scores-class-select').disabled = false;
 
   if (!scoresStudents.length) {
-    showToast('❌ No students found in this class sheet.');
+    showToast(`❌ ${lastSpreadsheetLoadError || 'No student names found in any spreadsheet tab.'}`);
     return;
   }
 
-  // Load saved gradebook data for this class
+  // Load saved gradebook data for this class and grading period.
   const allData = JSON.parse(localStorage.getItem(GRADEBOOK_KEY) || '{}');
-  gradebookData = allData[currentClassId] || {};
+  const periodData = JSON.parse(localStorage.getItem(PERIOD_DATA_KEY) || '{}');
+  const classPeriods = periodData[currentClassId] || {};
+  if (Object.prototype.hasOwnProperty.call(classPeriods, currentPeriod)) {
+    gradebookData = classPeriods[currentPeriod] || {};
+  } else if (currentPeriod === DEFAULT_PERIOD) {
+    // Use existing gradebooks as the default Prelim data.
+    gradebookData = allData[currentClassId] || {};
+  } else {
+    gradebookData = {};
+  }
 
-  // Ensure each category has default structure
+  // Ensure each category has exactly four available score columns.
   CATEGORIES.forEach(cat => {
-    if (!gradebookData[cat.id]) {
-      gradebookData[cat.id] = {
-        cols: Array.from({ length: DEFAULT_COLS }, (_, i) => ({ name: cat.id + ' ' + (i + 1), max: '' })),
-        rows: {}
-      };
+    const saved = gradebookData[cat.id] || {};
+    const cols = Array.isArray(saved.cols) ? saved.cols.slice(0, MAX_COLS) : [];
+    while (cols.length < DEFAULT_COLS) {
+      const i = cols.length + 1;
+      cols.push({ name: cat.id + ' ' + i, max: '' });
     }
+    const rows = saved.rows && typeof saved.rows === 'object' ? saved.rows : {};
+    gradebookData[cat.id] = { cols, rows };
+
     // Ensure all students have rows
     scoresStudents.forEach(s => {
-      if (!gradebookData[cat.id].rows[s]) {
-        gradebookData[cat.id].rows[s] = Array(gradebookData[cat.id].cols.length).fill('');
-      }
+      const row = Array.isArray(rows[s]) ? rows[s].slice(0, MAX_COLS) : [];
+      while (row.length < cols.length) row.push('');
+      rows[s] = row;
     });
   });
+
+  // Existing values in the selected period sheet are the starting values for
+  // the gradebook. Keep locally saved values when the sheet cell is blank.
+  if (sheetGradebook?.scores) {
+    CATEGORIES.forEach(cat => {
+      const sheetMaxScores = sheetGradebook.maxScores?.[cat.id] || [];
+      sheetMaxScores.slice(0, MAX_COLS).forEach((value, index) => {
+        // The spreadsheet is the source of truth for perfect scores.
+        if (value !== '') {
+          gradebookData[cat.id].cols[index].max = value;
+        }
+      });
+
+      const sheetRows = sheetGradebook.scores[cat.id] || {};
+      scoresStudents.forEach(student => {
+        const sheetRow = sheetRows[normalizeStudentName(student)];
+        if (!Array.isArray(sheetRow)) return;
+        const localRow = gradebookData[cat.id].rows[student];
+        sheetRow.slice(0, MAX_COLS).forEach((value, index) => {
+          if (value !== '') localRow[index] = value;
+        });
+      });
+    });
+  }
 
   const cls = classList.find(c => c.id === currentClassId);
   const infoEl = document.getElementById('scores-class-info');
@@ -104,7 +147,16 @@ async function loadClassForScores() {
   currentCat = 'Quiz';
   renderCategoryTabs();
   renderGradebookGrid();
+  renderScoreHistory();
   showToast(`✅ ${scoresStudents.length} students loaded`);
+}
+
+function changeScorePeriod() {
+  const select = document.getElementById('scores-period-select');
+  currentPeriod = PERIODS.includes(select?.value) ? select.value : DEFAULT_PERIOD;
+  localStorage.setItem('gv_current_period', currentPeriod);
+
+  if (currentClassId) loadClassForScores();
 }
 
 /* ─── CATEGORY TABS ─── */
@@ -114,7 +166,7 @@ function renderCategoryTabs() {
     <button
       class="gradebook-cat-btn ${currentCat === cat.id ? 'active' : ''}"
       onclick="switchCategory('${cat.id}')"
-    >${cat.emoji} ${cat.label}</button>
+    >${cat.label}</button>
   `).join('');
 }
 
@@ -126,46 +178,43 @@ function switchCategory(catId) {
   document.getElementById('gradebook-cat-title').textContent = (cat?.emoji || '') + ' ' + (cat?.label || catId);
 }
 
+function closeGradebookWorkspace() {
+  currentClassId = '';
+  currentSheetTabName = '';
+  scoresStudents = [];
+  document.getElementById('scores-workspace').classList.add('hidden');
+  const classSelect = document.getElementById('scores-class-select');
+  if (classSelect) classSelect.value = '';
+  renderScoreHistory();
+}
+
 /* ─── GRADEBOOK GRID ─── */
 function renderGradebookGrid() {
   const data  = gradebookData[currentCat];
   if (!data) return;
   const cols  = data.cols;
   const table = document.getElementById('gradebook-table');
+  const addColumnBtn = document.getElementById('add-gradebook-column-btn');
+  if (addColumnBtn) {
+    addColumnBtn.disabled = cols.length >= MAX_COLS;
+    addColumnBtn.title = cols.length >= MAX_COLS
+      ? 'Maximum of 4 scores per category'
+      : 'Add score column';
+  }
 
   let html = '<thead>';
 
-  // Row 1: "NAMES" + editable column name headers
+  // Header row: student names plus four maximum-score inputs.
   html += '<tr>';
   html += `<th class="gb-name-col">NAMES</th>`;
   cols.forEach((col, ci) => {
     html += `
       <th class="gb-col-header">
-        <input
-          class="gb-col-name"
-          type="text"
-          value="${escapeHTML(col.name)}"
-          placeholder="Activity name"
-          oninput="updateColName(${ci}, this.value)"
-        />
-      </th>`;
-  });
-  html += '</tr>';
-
-  // Row 2: blank name cell + max score inputs
-  html += '<tr>';
-  html += `<th class="gb-max-label">/ MAX SCORE</th>`;
-  cols.forEach((col, ci) => {
-    html += `
-      <th class="gb-col-header">
-        <input
-          class="gb-max-input"
-          type="number"
-          value="${escapeHTML(String(col.max))}"
-          placeholder="Max"
-          min="0"
-          oninput="updateColMax(${ci}, this.value)"
-        />
+        <div class="gb-column-label">Score ${ci + 1}</div>
+        <input class="gb-max-input" type="number" value="${escapeHTML(String(col.max))}"
+          placeholder="Max score" min="0"
+          aria-label="Maximum score for ${escapeHTML(col.name)}"
+          oninput="updateColMax(${ci}, this.value)" />
       </th>`;
   });
   html += '</tr>';
@@ -241,6 +290,10 @@ function gbKeyNav(e, si, ci) {
 /* ─── ADD COLUMN ─── */
 function addGradebookColumn() {
   const data = gradebookData[currentCat];
+  if (data.cols.length >= MAX_COLS) {
+    showToast('⚠️ Maximum of 4 scores per category.');
+    return;
+  }
   const ci   = data.cols.length + 1;
   const cat  = CATEGORIES.find(c => c.id === currentCat);
   data.cols.push({ name: (cat?.id || currentCat) + ' ' + ci, max: '' });
@@ -292,13 +345,21 @@ function copyGradebookForSheets() {
 /* ─── SAVE ─── */
 async function saveGradebook() {
   if (!currentClassId) { showToast('❌ Select a class first.'); return; }
+  const selectedCategory = CATEGORIES.find(cat => cat.id === currentCat);
+  const categoryLabel = selectedCategory?.label || currentCat;
+  showToast(`Saving ${currentPeriod} ${categoryLabel} scores...`);
 
-  // Save to localStorage
+  // Save to localStorage, separated by class and grading period.
   let allData = JSON.parse(localStorage.getItem(GRADEBOOK_KEY) || '{}');
-  allData[currentClassId] = gradebookData;
-  localStorage.setItem(GRADEBOOK_KEY, JSON.stringify(allData));
-  showToast('💾 Gradebook saved locally.');
-
+  let periodData = JSON.parse(localStorage.getItem(PERIOD_DATA_KEY) || '{}');
+  if (!periodData[currentClassId]) periodData[currentClassId] = {};
+  periodData[currentClassId][currentPeriod] = gradebookData;
+  localStorage.setItem(PERIOD_DATA_KEY, JSON.stringify(periodData));
+  // Keep the original key updated for legacy Prelim data.
+  if (currentPeriod === DEFAULT_PERIOD) {
+    allData[currentClassId] = gradebookData;
+    localStorage.setItem(GRADEBOOK_KEY, JSON.stringify(allData));
+  }
   // Also build flat score entries for history/Firebase
   const date = new Date().toISOString();
   const cls  = classList.find(c => c.id === currentClassId);
@@ -332,7 +393,7 @@ async function saveGradebook() {
   if (typeof _db !== 'undefined' && _db) {
     try {
       const ref  = window._firestoreDoc(_db, FIRESTORE_COL, 'gradebook');
-      await window._firestoreSetDoc(ref, { data: allData }, { merge: true });
+      await window._firestoreSetDoc(ref, { data: allData, periods: periodData }, { merge: true });
       showToast('✅ Synced to Cloud!');
     } catch(e) {
       console.warn('Cloud sync failed:', e);
@@ -340,9 +401,19 @@ async function saveGradebook() {
     }
   }
 
-  // Write to Google Sheets via Apps Script if configured
+  // Write the selected category to the selected grading-period sheet tab.
+  let sheetResult = null;
   if (localStorage.getItem(SCRIPT_URL_KEY)) {
-    writeGradebookToSheet();
+    sheetResult = await writeGradebookToSheet();
+  }
+
+  if (sheetResult?.success) {
+    showToast(`✅ ${currentPeriod} ${categoryLabel} scores saved and synced to Google Sheets.`);
+  } else if (sheetResult) {
+    const detail = sheetResult.errors?.[0] ? ` ${sheetResult.errors[0]}` : '';
+    showToast(`⚠️ Saved in the portal, but Google Sheets sync failed.${detail}`);
+  } else {
+    showToast(`✅ ${currentPeriod} ${categoryLabel} scores saved locally.`);
   }
 
   renderScoreHistory();
@@ -428,40 +499,60 @@ function saveSheetMapping() {
 }
 
 /* ─── WRITE TO GOOGLE SHEETS VIA APPS SCRIPT ─── */
+function getSheetScoreHeaders(categoryId) {
+  const prefixes = { Quiz: 'Q', Oral: 'O', Activity: 'G', Exam: 'E' };
+  const prefix = prefixes[categoryId] || categoryId;
+  return [1, 2, 3, 4].map(number => prefix + number);
+}
+
 async function writeGradebookToSheet() {
   const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY);
-  if (!scriptUrl) return;
+  if (!scriptUrl) return { success: false, errors: ['Apps Script URL is not configured.'] };
 
   const cls = classList.find(c => c.id === currentClassId);
-  if (!cls) return;
+  if (!cls) return { success: false, errors: ['No class is selected.'] };
 
   const sheetId = extractSheetId(cls.url);
-  if (!sheetId) { showToast('❌ Could not extract Sheet ID from class URL.'); return; }
-
-  const mapping = JSON.parse(localStorage.getItem(SHEET_MAP_KEY) || '{}');
-  const classMapping = mapping[currentClassId] || {};
+  if (!sheetId) return { success: false, errors: ['Could not extract the Google Sheet ID.'] };
 
   let writeCount = 0;
+  const errors = [];
+  const categoriesToWrite = CATEGORIES.filter(cat => cat.id === currentCat);
 
-  for (const cat of CATEGORIES) {
-    const tabName = classMapping[cat.id];
-    if (!tabName) continue;
+  for (const cat of categoriesToWrite) {
+    // Preserve the exact capitalization/spelling from the workbook, such as
+    // "SemiFinal", because Apps Script sheet lookup is case-sensitive.
+    const tabName = currentSheetTabName || currentPeriod;
 
     const catData = gradebookData[cat.id];
     if (!catData) continue;
+
+    // Use the actual labels in the class-record template so Apps Script can
+    // update Q1-Q4/O1-O4/G1-G4/E1-E4 instead of creating new columns.
+    const sheetHeaders = getSheetScoreHeaders(cat.id);
+    const studentScores = {};
+    scoresStudents.forEach(student => {
+      studentScores[normalizeStudentName(student)] = catData.rows[student] || Array(catData.cols.length).fill('');
+    });
 
     // Prepare payload for Apps Script
     const payload = {
       sheetId: sheetId,
       tabName: tabName,
-      headers: catData.cols.map(c => c.name),
+      sheetName: tabName,
+      period: currentPeriod,
+      category: cat.id,
+      categoryId: cat.id,
+      headers: sheetHeaders,
+      scoreHeaders: sheetHeaders,
+      columnHeaders: sheetHeaders,
       maxScores: catData.cols.map(c => c.max || ''),
-      studentScores: {}
+      perfectScores: catData.cols.map(c => c.max || ''),
+      studentNames: scoresStudents,
+      studentScores,
+      scores: studentScores,
+      scoresByStudent: studentScores
     };
-
-    scoresStudents.forEach(student => {
-      payload.studentScores[student.trim().toUpperCase()] = catData.rows[student] || Array(catData.cols.length).fill('');
-    });
 
     try {
       // Send as plain text to avoid CORS OPTIONS preflight block in Apps Script
@@ -472,27 +563,43 @@ async function writeGradebookToSheet() {
       });
 
       if (!fetchResp.ok) {
-        console.warn('Apps Script write error');
+        errors.push(`The ${currentPeriod} sheet tab returned an HTTP error.`);
         continue;
       }
       
-      const result = await fetchResp.json();
-      if (result.success) {
+      const responseText = await fetchResp.text();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        errors.push('Apps Script returned an invalid response instead of JSON.');
+        continue;
+      }
+
+      const reportedWrites = [result.writeCount, result.updated, result.updatedRows, result.updatedCells]
+        .find(value => value !== undefined && value !== null);
+      const hasConfirmedWrite = reportedWrites !== undefined && Number(reportedWrites) > 0;
+
+      if (hasConfirmedWrite) {
         writeCount++;
       } else {
         console.warn('Apps Script error:', result.error);
-        showToast('❌ Sheet sync error: ' + result.error);
+        const detail = typeof result.error === 'string'
+          ? result.error
+          : result.error ? JSON.stringify(result.error) : '';
+        errors.push(detail || 'The Apps Script did not confirm any changed cells. Redeploy the matching Code.gs handler.');
       }
     } catch (err) {
       console.error('Fetch error:', err);
+      errors.push('Could not connect to the Apps Script deployment.');
     }
   }
 
-  if (writeCount > 0) {
-    showToast(`✅ Auto-synced to ${writeCount} sheet tab(s)!`);
-  } else {
-    showToast('⚠️ Saved locally. No sheet tabs mapped or sync failed.');
-  }
+  return {
+    success: writeCount === categoriesToWrite.length && writeCount > 0,
+    writeCount,
+    errors
+  };
 }
 
 // Convert 0-indexed column number to A1 notation letter(s)
@@ -516,12 +623,17 @@ function getAllScores() {
 }
 
 function renderScoreHistory() {
-  const filterClassId = document.getElementById('history-class-filter')?.value || '';
-  let entries = getAllScores();
-  if (filterClassId) entries = entries.filter(e => e.classId === filterClassId);
+  const tbody = document.getElementById('scores-history-tbody');
+
+  // Do not expose any student's score history until a class is selected.
+  if (!currentClassId) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:2rem;">Select a class above to view score history.</td></tr>`;
+    return;
+  }
+
+  let entries = getAllScores().filter(e => e.classId === currentClassId);
   entries.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  const tbody = document.getElementById('scores-history-tbody');
   if (!entries.length) {
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--muted); padding:2rem;">No scores recorded yet.</td></tr>`;
     return;
@@ -566,16 +678,16 @@ function deleteScoreEntry(id, fallbackIdx) {
 }
 
 async function deleteAllScores() {
-  const filterClassId = document.getElementById('history-class-filter')?.value || '';
-  const cls = classList.find(c => c.id === filterClassId);
-  const msg = filterClassId
-    ? `Delete all score history for ${cls?.name || 'this class'}?`
-    : 'Delete ALL score history? This cannot be undone.';
+  if (!currentClassId) {
+    showToast('Select a class first.');
+    return;
+  }
+
+  const cls = classList.find(c => c.id === currentClassId);
+  const msg = `Delete all score history for ${cls?.name || 'this class'}?`;
   if (!confirm(msg)) return;
 
-  let entries = filterClassId
-    ? getAllScores().filter(e => e.classId !== filterClassId)
-    : [];
+  let entries = getAllScores().filter(e => e.classId !== currentClassId);
 
   localStorage.setItem(SCORES_KEY, JSON.stringify(entries));
   if (typeof _db !== 'undefined' && _db) {
@@ -589,9 +701,8 @@ async function deleteAllScores() {
 }
 
 function exportScoresCSV() {
-  const filterClassId = document.getElementById('history-class-filter')?.value || '';
-  let entries = getAllScores();
-  if (filterClassId) entries = entries.filter(e => e.classId === filterClassId);
+  if (!currentClassId) { showToast('Select a class first.'); return; }
+  const entries = getAllScores().filter(e => e.classId === currentClassId);
   if (!entries.length) { showToast('No scores to export.'); return; }
 
   const header = ['Date','Class','Student','Category','Activity','Score','Max','Percent'];

@@ -141,6 +141,7 @@ const PAGE_TITLES = {
   attendance: 'Attendance',
   settings:   'Settings',
   groups:     'Groups',
+  'saved-groups': 'Saved Groups',
   picker:     'Random Picker',
 };
 

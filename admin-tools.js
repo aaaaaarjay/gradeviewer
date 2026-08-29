@@ -20,7 +20,7 @@ function toggleFullscreen(pageId) {
 
 /* ─── SHARED: FETCH STUDENTS ─── */
 function extractSheetId(url) {
-  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  const match = String(url || '').match(/\/d\/([a-zA-Z0-9-_]+)/);
   return match ? match[1] : null;
 }
 
@@ -45,6 +45,12 @@ function looksLikeName(str) {
   if (!str || str.length < 3) return false;
   const s = str.trim();
   const lower = s.toLowerCase();
+
+  // Do not treat class-record metadata as students.
+  if (/\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(s)) return false;
+  if (/\b(am|pm)\b/i.test(s) && /\d/.test(s)) return false;
+  if (/^(room|days?|teacher|subject|time|code)\s*:/i.test(s)) return false;
+  if (/^\d[\d\s:./-]*$/.test(s)) return false;
   
   if (isHeader(s) || isNumeric(s)) return false;
   
@@ -79,62 +85,250 @@ function findNameInRow(row, fixedCol) {
   return '';
 }
 
-async function fetchStudentsForClass(classId) {
+function findAnyNameInRow(row) {
+  return row.map(value => String(value || '').trim()).find(looksLikeName) || '';
+}
+
+function looksLikeRosterName(value) {
+  const text = String(value || '').trim();
+  // The class-record roster uses LAST NAME, FIRST NAME formatting. Requiring
+  // the comma prevents codes, schedules, subjects, and attendance labels from
+  // being treated as students.
+  return looksLikeName(text) && text.includes(',') && !/\d/.test(text);
+}
+
+function findRosterNameInRow(row, nameCol) {
+  const value = String(row[nameCol] || '').trim();
+  return looksLikeRosterName(value) ? value : '';
+}
+
+function normalizeStudentName(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+const workbookCache = new Map();
+let lastSpreadsheetLoadError = '';
+
+async function fetchWorkbookForClass(classId) {
+  lastSpreadsheetLoadError = '';
   const cls = classList.find(c => c.id === classId);
-  if (!cls || !cls.url) return [];
+  if (!cls || !cls.url) {
+    lastSpreadsheetLoadError = 'This class does not have a Google Sheets link yet.';
+    return null;
+  }
 
   const sheetId = extractSheetId(cls.url);
-  if (!sheetId) return [];
+  if (!sheetId) {
+    lastSpreadsheetLoadError = 'The class link is not a Google Sheets URL. Open the class settings and paste the spreadsheet link, not the Apps Script deployment link.';
+    return null;
+  }
+  if (workbookCache.has(sheetId)) return workbookCache.get(sheetId);
 
   try {
     const fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
     const res = await fetch(fetchUrl);
-    const arrayBuffer = await res.arrayBuffer();
-    
-    // Parse with SheetJS
-    const wb = XLSX.read(arrayBuffer, { type: 'array' });
-    if (!wb.SheetNames.length) return [];
-    
-    // Scan sheets to find names (prefer Summary or Student ID sheet)
-    const names = new Set();
-    
-    for (let i = 0; i < Math.min(4, wb.SheetNames.length); i++) {
-      const sheet = wb.Sheets[wb.SheetNames[i]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      
-      let headerRow = -1;
-      let nameCol = 0;
-      
-      // 1. Find the header row that contains "Name" or "Student"
-      for (let r = 0; r < Math.min(rows.length, 15); r++) {
-        const cells = rows[r].map(c => String(c).toLowerCase().trim());
-        const idx = cells.findIndex(c => c.includes('name') || c.includes('student'));
-        if (idx >= 0) {
-          headerRow = r;
-          nameCol = idx;
-          break;
-        }
-      }
-      
-      if (headerRow < 0) continue; // Skip sheet if no header found
-      
-      // 2. Read names from that column downwards
-      for (let r = headerRow + 1; r < rows.length; r++) {
-        const val = findNameInRow(rows[r], nameCol);
-        if (val) {
-          names.add(val);
-        }
-      }
-      
-      if (names.size > 10) break; // If we found a good list, stop searching other sheets
+    if (!res.ok) {
+      lastSpreadsheetLoadError = `The Google Sheet could not be read (HTTP ${res.status}). Check that the class link is a Google Sheets link and that the sheet is shared for viewing.`;
+      return null;
     }
-    
-    return Array.from(names).sort();
-
+    const arrayBuffer = await res.arrayBuffer();
+    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+    if (!wb.SheetNames.length) return null;
+    workbookCache.set(sheetId, wb);
+    return wb;
   } catch (err) {
-    console.error("Error fetching students:", err);
-    return [];
+    console.error('Error fetching spreadsheet:', err);
+    lastSpreadsheetLoadError = 'The Google Sheet could not be read. Check the class link, sharing permission, and internet connection.';
+    return null;
   }
+}
+
+function getSheetRows(wb, sheetName) {
+  const sheet = wb?.Sheets?.[sheetName];
+  return sheet ? XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) : [];
+}
+
+function findNameHeader(rows) {
+  let fallback = null;
+  for (let r = 0; r < Math.min(rows.length, 20); r++) {
+    const cells = rows[r].map(c => String(c).toLowerCase().trim());
+    const exact = cells.findIndex(c =>
+      c === 'name' || c === 'names' || c === 'student' || c === 'students'
+      || (c.includes('student') && c.includes('name'))
+      || (c.includes('learner') && c.includes('name'))
+    );
+    if (exact >= 0) return { row: r, col: exact };
+
+    // Keep a weaker match as a fallback for differently formatted templates,
+    // but prefer an actual name header when one exists later in the sheet.
+    if (!fallback) {
+      const idx = cells.findIndex(c => c.includes('name') || c.includes('student'));
+      if (idx >= 0) fallback = { row: r, col: idx };
+    }
+  }
+  return fallback || { row: -1, col: 0 };
+}
+
+function collectNamesFromWorkbook(wb) {
+  const names = new Map();
+
+  (wb?.SheetNames || []).forEach(sheetName => {
+    const rows = getSheetRows(wb, sheetName);
+    const header = findNameHeader(rows);
+    if (header.row < 0) return;
+
+    const firstDataRow = header.row >= 0 ? header.row + 1 : 0;
+    for (let r = firstDataRow; r < rows.length; r++) {
+      const name = findRosterNameInRow(rows[r], header.col);
+      if (name) names.set(normalizeStudentName(name), name);
+    }
+  });
+
+  return Array.from(names.values()).sort();
+}
+
+async function fetchStudentsForClass(classId) {
+  const wb = await fetchWorkbookForClass(classId);
+  return collectNamesFromWorkbook(wb);
+}
+
+function normalizeSheetName(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function findGradingPeriodSheet(wb, period) {
+  const aliases = {
+    Prelim: ['prelim', 'preliminary'],
+    Midterm: ['midterm', 'mid'],
+    Semifinal: ['semifinal', 'semifinals', 'semi'],
+    Final: ['final', 'finals']
+  };
+  const wanted = (aliases[period] || [period]).map(normalizeSheetName);
+  const names = (wb?.SheetNames || []).map(name => ({
+    name,
+    normalized: normalizeSheetName(name)
+  }));
+  return names.find(item => wanted.includes(item.normalized))?.name || '';
+}
+
+function scoreValueFromCell(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return '';
+  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+  const text = String(value).trim();
+  const number = Number(text);
+  return Number.isFinite(number) ? number : text;
+}
+
+function findScoreColumns(rows, preferredRow) {
+  const prefixes = { Quiz: 'Q', Oral: 'O', Activity: 'G', Exam: 'E' };
+  const result = {};
+
+  const rowOrder = [];
+  const center = Number.isInteger(preferredRow) ? preferredRow : 0;
+  for (let distance = 0; distance < 20; distance++) {
+    const before = center - distance;
+    const after = center + distance;
+    if (before >= 0 && !rowOrder.includes(before)) rowOrder.push(before);
+    if (after < rows.length && !rowOrder.includes(after)) rowOrder.push(after);
+  }
+
+  Object.entries(prefixes).forEach(([category, prefix]) => {
+    result[category] = [1, 2, 3, 4].map(number => {
+      const wanted = prefix + number;
+      for (const r of rowOrder) {
+        if (r >= Math.min(rows.length, 20)) continue;
+        for (let c = 0; c < rows[r].length; c++) {
+          const cell = String(rows[r][c] ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (cell === wanted) return c;
+        }
+      }
+      return -1;
+    });
+  });
+
+  return result;
+}
+
+function findLegacyExamColumn(rows, preferredRow, period) {
+  const aliases = period === 'Final'
+    ? ['F35', 'FINAL', 'EXAM']
+    : period === 'Midterm'
+      ? ['M35', 'MIDTERM', 'EXAM']
+      : ['EXAM', 'E35'];
+  const rowOrder = [];
+  const center = Number.isInteger(preferredRow) ? preferredRow : 0;
+  for (let distance = 0; distance < 20; distance++) {
+    const before = center - distance;
+    const after = center + distance;
+    if (before >= 0 && !rowOrder.includes(before)) rowOrder.push(before);
+    if (after < rows.length && !rowOrder.includes(after)) rowOrder.push(after);
+  }
+  for (const r of rowOrder) {
+    if (r >= Math.min(rows.length, 20)) continue;
+    for (let c = 0; c < rows[r].length; c++) {
+      const cell = String(rows[r][c] ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (aliases.includes(cell)) return c;
+    }
+  }
+  return -1;
+}
+
+/* Read the selected period tab so existing spreadsheet scores appear in the gradebook. */
+async function fetchGradebookForClass(classId, period) {
+  const wb = await fetchWorkbookForClass(classId);
+  if (!wb) return null;
+
+  const students = collectNamesFromWorkbook(wb);
+  const sheetName = findGradingPeriodSheet(wb, period);
+  const scores = {};
+  const maxScores = {};
+  if (!sheetName) return { students, sheetName: '', scores, maxScores };
+
+  const rows = getSheetRows(wb, sheetName);
+  const header = findNameHeader(rows);
+  const columns = findScoreColumns(rows, header.row);
+  if (columns.Exam.every(column => column < 0)) {
+    const legacyExamColumn = findLegacyExamColumn(rows, header.row, period);
+    if (legacyExamColumn >= 0) columns.Exam[0] = legacyExamColumn;
+  }
+  Object.keys(columns).forEach(category => {
+    scores[category] = {};
+    maxScores[category] = ['', '', '', ''];
+  });
+
+  if (header.row < 0) return { students, sheetName, scores, maxScores };
+
+  // Class-record templates place perfect scores on one or more non-student
+  // rows below the activity labels. Read every non-student row so a metadata
+  // row cannot prevent the max scores from being found.
+  for (let r = header.row; r < rows.length; r++) {
+    // Only the detected student-name column decides whether this is a student
+    // row. Other cells may contain time, room, percentage, or header text.
+    const nameCell = String(rows[r][header.col] || '').trim();
+    if (looksLikeName(nameCell)) continue;
+    Object.entries(columns).forEach(([category, categoryColumns]) => {
+      categoryColumns.forEach((column, index) => {
+        if (column < 0 || maxScores[category][index] !== '') return;
+        const value = scoreValueFromCell(rows[r][column]);
+        if (typeof value === 'number') maxScores[category][index] = value;
+      });
+    });
+  }
+
+  for (let r = header.row + 1; r < rows.length; r++) {
+    const name = findRosterNameInRow(rows[r], header.col);
+    if (!name) continue;
+    const key = normalizeStudentName(name);
+
+    Object.entries(columns).forEach(([category, categoryColumns]) => {
+      const values = categoryColumns.map(column =>
+        column >= 0 ? scoreValueFromCell(rows[r][column]) : ''
+      );
+      if (values.some(value => value !== '')) scores[category][key] = values;
+    });
+  }
+
+  return { students, sheetName, scores, maxScores };
 }
 
 /* ═══════════════════════════════════════════════
@@ -147,6 +341,28 @@ document.getElementById('nav-groups').addEventListener('click', () => {
   select.innerHTML = '<option value="">-- Select a Class --</option>' + 
     classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
 });
+
+let savedGroupsPageGroups = [];
+let savedGroupsPageStudents = [];
+let savedGroupsPageSheet = null;
+let savedGroupsPageWorkbook = null;
+const GROUP_SCORE_STORAGE_PERIOD = 'Groups';
+const GROUP_SCORE_STORAGE_CATEGORY = 'Group';
+
+function openSavedGroupsPage() {
+  const source = document.getElementById('group-class-select');
+  const select = document.getElementById('saved-groups-class-select');
+  select.innerHTML = '<option value="">-- Select a Class --</option>' +
+    classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  select.value = source.value || '';
+  showPage('saved-groups');
+  if (select.value) {
+    loadSavedGroupsPage();
+  } else {
+    document.getElementById('saved-groups-workspace').classList.add('hidden');
+    showToast('Select a class in Groups Manager first.');
+  }
+}
 
 async function loadClassForGroups() {
   const classId = document.getElementById('group-class-select').value;
@@ -180,7 +396,12 @@ async function loadClassForGroups() {
   // Try loading existing saved groups first
   const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
   if (saved[classId] && saved[classId].length > 0) {
-    currentGroups = saved[classId];
+    const validNames = new Set(currentStudents.map(normalizeStudentName));
+    currentGroups = saved[classId].map(group => ({
+      ...group,
+      students: (Array.isArray(group.students) ? group.students : [])
+        .filter(student => validNames.has(normalizeStudentName(student)))
+    }));
     
     // Find unassigned students (those in currentStudents but not in any group)
     const assignedSet = new Set();
@@ -624,12 +845,545 @@ async function saveGroups() {
       showToast("⚠️ Offline: Groups saved locally only.");
     }
   }
+
+  await syncGroupsToSheets(classId);
+}
+
+async function syncGroupsToSheets(classId) {
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const cls = classList.find(item => item.id === classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  if (!scriptUrl || !sheetId) return;
+
+  showToast('Saving groups to the Groups sheet...');
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'saveGroups',
+        sheetId,
+        tabName: 'Groups',
+        sheetName: 'Groups',
+        studentNames: currentStudents,
+        groups: currentGroups.map(group => ({
+          id: group.id,
+          name: group.name,
+          students: group.students
+        }))
+      })
+    });
+    const result = JSON.parse(await response.text());
+    const writes = Number(result.writeCount || result.updatedCells || 0);
+    const assigned = Number(result.assignedStudentCount || 0);
+    if (!response.ok || writes <= 0 || assigned <= 0) {
+      throw new Error(result.error || 'No student group assignments were written. Deploy the latest Apps Script version.');
+    }
+
+    const sheetIdForCache = extractSheetId(cls.url);
+    if (sheetIdForCache) workbookCache.delete(sheetIdForCache);
+    showToast('✅ Groups saved online in the Groups sheet.');
+  } catch (error) {
+    showToast(`⚠️ Groups saved locally, but online sync failed: ${error.message}`);
+  }
 }
 
 
 /* ═══════════════════════════════════════════════
    RANDOM PICKER
    ═══════════════════════════════════════════════ */
+
+function parseGroupsSheet(wb, validStudents) {
+  const sheetName = (wb?.SheetNames || []).find(name => normalizeSheetName(name) === 'groups');
+  if (!sheetName) return [];
+
+  const rows = getSheetRows(wb, sheetName);
+  if (!rows.length) return [];
+  const header = rows[0].map(value => normalizeSheetName(value));
+  const studentCol = header.findIndex(value => ['allstudents', 'student', 'students', 'name', 'names'].includes(value));
+  const groupCol = header.findIndex(value => value === 'groupnumber' || value === 'group' || value === 'groupname');
+  const membersCol = header.findIndex(value => value === 'groupmembers' || value === 'members');
+  if (studentCol < 0 || groupCol < 0) return [];
+
+  // The Groups tab is the source of truth for group membership. Use its
+  // All students column first so formatting differences in other tabs cannot
+  // make valid group members appear as zero members.
+  const sheetRoster = new Map(rows.slice(1)
+    .map(row => String(row[studentCol] || '').trim())
+    .filter(Boolean)
+    .map(name => [normalizeStudentName(name), name]));
+  const valid = sheetRoster.size
+    ? new Set(sheetRoster.keys())
+    : new Set((validStudents || []).map(normalizeStudentName));
+  const byGroup = new Map();
+  for (let r = 1; r < rows.length; r++) {
+    const student = String(rows[r][studentCol] || '').trim();
+    const groupName = String(rows[r][groupCol] || '').trim();
+    if (!student || !groupName) continue;
+
+    const members = membersCol >= 0
+      ? String(rows[r][membersCol] || '').split(',').map(value => value.trim()).filter(Boolean)
+      : [];
+    const key = normalizeStudentName(groupName);
+    const displayName = /^\d+$/.test(groupName) ? `Group ${groupName}` : groupName;
+    if (!byGroup.has(key)) byGroup.set(key, { id: `group_${byGroup.size}`, name: displayName, students: [] });
+    const group = byGroup.get(key);
+    // The Groups tab stores one student per row in column A. Use that row as
+    // the member source; column F is kept as a readable copy of the same name.
+    // Fallback to F only for older group-sheet layouts without an A-row name.
+    const candidates = student ? [student] : members;
+    candidates.forEach(member => {
+      const memberKey = normalizeStudentName(member);
+      if (valid.has(memberKey) && !group.students.some(existing => normalizeStudentName(existing) === memberKey)) {
+        group.students.push(sheetRoster.get(memberKey) || member);
+      }
+    });
+  }
+  return Array.from(byGroup.values()).sort((left, right) => {
+    const leftNumber = Number((left.name.match(/\d+/) || [0])[0]);
+    const rightNumber = Number((right.name.match(/\d+/) || [0])[0]);
+    return leftNumber - rightNumber || left.name.localeCompare(right.name);
+  });
+}
+
+function getNextGroupScoreColumn(wb, group) {
+  const sheetName = (wb?.SheetNames || []).find(name => normalizeSheetName(name) === 'groups');
+  if (!sheetName) return 2;
+  const rows = getSheetRows(wb, sheetName);
+  if (!rows.length) return 2;
+  const header = rows[0].map(value => normalizeSheetName(value));
+  const studentCol = header.findIndex(value => ['allstudents', 'student', 'students', 'name', 'names'].includes(value));
+  const scoreCols = [
+    header.findIndex(value => value === 'score1'),
+    header.findIndex(value => value === 'score2')
+  ];
+  if (studentCol < 0) return 2;
+
+  for (let i = 0; i < scoreCols.length; i++) {
+    const col = scoreCols[i];
+    if (col < 0) return i + 2;
+    const used = group.students.some(student => rows.slice(1).some(row =>
+      normalizeStudentName(row[studentCol]) === normalizeStudentName(student)
+      && String(row[col] ?? '').trim() !== ''
+    ));
+    if (!used) return col + 1;
+  }
+  return 2;
+}
+
+function getSavedGroupsForClass(classId, validStudents, wb) {
+  const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+  const valid = new Set((validStudents || []).map(normalizeStudentName));
+  const onlineGroups = parseGroupsSheet(wb, validStudents);
+  const groups = onlineGroups.length
+    ? onlineGroups
+    : (Array.isArray(saved[classId]) ? saved[classId] : []);
+  return groups.map((group, index) => ({
+    id: group.id || `group_${index}`,
+    name: group.name || `Group ${index + 1}`,
+    students: (Array.isArray(group.students) ? group.students : [])
+      .filter(student => valid.has(normalizeStudentName(student)))
+  }));
+}
+
+function getSavedGroupScoreData(classId, period, category) {
+  try {
+    const data = JSON.parse(localStorage.getItem('gv_group_scores') || '{}');
+    return data[classId]?.[period]?.[category] || {};
+  } catch {
+    return {};
+  }
+}
+
+async function loadSavedGroupsPage() {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  const workspace = document.getElementById('saved-groups-workspace');
+  if (!classId) {
+    workspace.classList.add('hidden');
+    return;
+  }
+
+  const period = GROUP_SCORE_STORAGE_PERIOD;
+  const category = GROUP_SCORE_STORAGE_CATEGORY;
+  const classSelect = document.getElementById('saved-groups-class-select');
+  classSelect.disabled = true;
+
+  savedGroupsPageStudents = await fetchStudentsForClass(classId);
+  savedGroupsPageWorkbook = await fetchWorkbookForClass(classId);
+  savedGroupsPageGroups = getSavedGroupsForClass(classId, savedGroupsPageStudents, savedGroupsPageWorkbook);
+  savedGroupsPageSheet = null;
+  classSelect.disabled = false;
+
+  const scoreData = getSavedGroupScoreData(classId, period, category);
+
+  const cls = classList.find(item => item.id === classId);
+  document.getElementById('saved-groups-title').textContent =
+    `${cls?.name || 'Class'} — Saved Groups`;
+  workspace.classList.remove('hidden');
+  renderSavedGroupsPage(scoreData);
+}
+
+function renderSavedGroupsPage(scoreData = {}) {
+  const list = document.getElementById('saved-groups-list');
+  if (!savedGroupsPageGroups.length) {
+    list.innerHTML = '<div class="saved-groups-empty">No saved groups found for this class. Create and save groups first.</div>';
+    return;
+  }
+
+  list.innerHTML = savedGroupsPageGroups.map((group, index) => {
+    const saved = scoreData.groups?.[group.id];
+    const hasScore = saved && typeof saved === 'object'
+      ? saved.groupScore !== '' || Object.values(saved.members || {}).some(value => String(value).trim() !== '')
+      : String(saved ?? '').trim() !== '';
+    return `
+      <article class="saved-group-card">
+        <div class="saved-group-card-header">
+          <div>
+            <div class="saved-group-name">${escapeHTML(group.name)}</div>
+            <div class="saved-group-count">${group.students.length} members</div>
+          </div>
+          <div class="saved-group-card-actions">
+            <button class="btn btn-primary btn-sm" onclick="openSavedGroupScoreModal(${index})">⭐ Score</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteSavedGroup(${index})">🗑 Delete</button>
+          </div>
+        </div>
+        <div class="saved-group-members">
+          ${group.students.length
+            ? group.students.map(student => `<span>${escapeHTML(student)}</span>`).join('')
+            : '<span class="saved-group-no-members">No valid roster members</span>'}
+        </div>
+        <div class="saved-group-status ${hasScore ? 'has-score' : ''}">${hasScore ? '✅ Score saved' : 'No score recorded yet'}</div>
+      </article>`;
+  }).join('');
+}
+
+async function deleteSavedGroup(groupIndex) {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  const group = savedGroupsPageGroups[groupIndex];
+  if (!classId || !group) return;
+  if (!confirm(`Delete ${group.name} and its saved group scores?`)) return;
+
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const cls = classList.find(item => item.id === classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  if (scriptUrl && sheetId) {
+    try {
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'deleteGroup',
+          sheetId,
+          tabName: 'Groups',
+          sheetName: 'Groups',
+          studentNames: group.students
+        })
+      });
+      const result = JSON.parse(await response.text());
+      const writes = Number(result.writeCount || result.updatedCells || 0);
+      if (!response.ok || writes <= 0) throw new Error(result.error || 'No group rows were cleared.');
+      workbookCache.delete(sheetId);
+      showToast(`✅ ${group.name} deleted from the Groups sheet.`);
+    } catch (error) {
+      showToast(`⚠️ Could not delete ${group.name} online: ${error.message}`);
+      return;
+    }
+  } else {
+    showToast('⚠️ Apps Script is not configured. The group was removed only from this browser.');
+  }
+
+  const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+  if (Array.isArray(saved[classId])) {
+    saved[classId] = saved[classId].filter(item => item.id !== group.id);
+    localStorage.setItem('gv_groups', JSON.stringify(saved));
+  }
+  try {
+    const scoreData = JSON.parse(localStorage.getItem('gv_group_scores') || '{}');
+    Object.values(scoreData[classId] || {}).forEach(categoryData => {
+      if (categoryData?.groups) delete categoryData.groups[group.id];
+    });
+    localStorage.setItem('gv_group_scores', JSON.stringify(scoreData));
+  } catch (error) {
+    console.warn('Could not remove local group score history:', error);
+  }
+
+  savedGroupsPageGroups.splice(groupIndex, 1);
+  renderSavedGroupsPage(getSavedGroupScoreData(
+    classId,
+    GROUP_SCORE_STORAGE_PERIOD,
+    GROUP_SCORE_STORAGE_CATEGORY
+  ));
+}
+
+async function deleteAllSavedGroups() {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  if (!classId) {
+    showToast('Select a class first.');
+    return;
+  }
+  if (!savedGroupsPageGroups.length) {
+    showToast('There are no saved groups to delete.');
+    return;
+  }
+  if (!confirm('Delete all saved groups and their Score 1/Score 2 values for this class?')) return;
+
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const cls = classList.find(item => item.id === classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  if (scriptUrl && sheetId) {
+    try {
+      const response = await fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'deleteAllGroups',
+          sheetId,
+          tabName: 'Groups',
+          sheetName: 'Groups'
+        })
+      });
+      const result = JSON.parse(await response.text());
+      if (!response.ok || result.success !== true) throw new Error(result.error || 'Groups could not be cleared.');
+      workbookCache.delete(sheetId);
+    } catch (error) {
+      showToast(`⚠️ Could not delete groups online: ${error.message}`);
+      return;
+    }
+  }
+
+  const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+  delete saved[classId];
+  localStorage.setItem('gv_groups', JSON.stringify(saved));
+  try {
+    const scoreData = JSON.parse(localStorage.getItem('gv_group_scores') || '{}');
+    delete scoreData[classId];
+    localStorage.setItem('gv_group_scores', JSON.stringify(scoreData));
+  } catch (error) {
+    console.warn('Could not remove local group scores:', error);
+  }
+
+  savedGroupsPageGroups = [];
+  renderSavedGroupsPage({});
+  showToast('✅ All saved groups were deleted.');
+}
+
+function storeSavedGroupScoreData(classId, period, category, data) {
+  const all = JSON.parse(localStorage.getItem('gv_group_scores') || '{}');
+  if (!all[classId]) all[classId] = {};
+  if (!all[classId][period]) all[classId][period] = {};
+  all[classId][period][category] = data;
+  localStorage.setItem('gv_group_scores', JSON.stringify(all));
+}
+
+let savedGroupScoreModalIndex = -1;
+let savedGroupScoreMode = 'group';
+
+function getSavedGroupScoreEntry(scoreData, group) {
+  const saved = scoreData?.groups?.[group.id];
+  if (saved && typeof saved === 'object') {
+    return {
+      mode: saved.mode === 'individual' ? 'individual' : 'group',
+      groupScore: saved.groupScore ?? '',
+      members: saved.members || {}
+    };
+  }
+  // Keep scores saved by the previous inline version compatible.
+  return { mode: 'group', groupScore: saved ?? '', members: {} };
+}
+
+function openSavedGroupScoreModal(groupIndex) {
+  const group = savedGroupsPageGroups[groupIndex];
+  if (!group) return;
+
+  savedGroupScoreModalIndex = groupIndex;
+  const period = GROUP_SCORE_STORAGE_PERIOD;
+  const category = GROUP_SCORE_STORAGE_CATEGORY;
+  const activity = 'Groups sheet score';
+  const scoreData = getSavedGroupScoreData(
+    document.getElementById('saved-groups-class-select').value,
+    period,
+    category
+  );
+  const saved = getSavedGroupScoreEntry(scoreData, group);
+
+  document.getElementById('saved-group-score-title').textContent = `Score ${group.name}`;
+  document.getElementById('saved-group-score-context').textContent = `${period} • ${category} • ${activity}`;
+  document.getElementById('saved-group-group-score').value = saved.groupScore ?? '';
+  document.getElementById('saved-group-score-column').value = String(getNextGroupScoreColumn(savedGroupsPageWorkbook, group));
+  savedGroupScoreMode = saved.mode;
+  renderSavedGroupMemberScores(group, saved.members);
+  setSavedGroupScoreMode(savedGroupScoreMode);
+  document.getElementById('saved-group-score-modal').classList.remove('hidden');
+}
+
+function closeSavedGroupScoreModal() {
+  savedGroupScoreModalIndex = -1;
+  document.getElementById('saved-group-score-modal').classList.add('hidden');
+}
+
+function setSavedGroupScoreMode(mode) {
+  savedGroupScoreMode = mode === 'individual' ? 'individual' : 'group';
+  document.getElementById('saved-group-score-group-panel').classList.toggle('hidden', savedGroupScoreMode !== 'group');
+  document.getElementById('saved-group-score-individual-panel').classList.toggle('hidden', savedGroupScoreMode !== 'individual');
+  document.getElementById('saved-group-mode-group').className = savedGroupScoreMode === 'group' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('saved-group-mode-individual').className = savedGroupScoreMode === 'individual' ? 'btn btn-primary' : 'btn btn-ghost';
+}
+
+function renderSavedGroupMemberScores(group, members = {}) {
+  const list = document.getElementById('saved-group-member-score-list');
+  list.innerHTML = group.students.map((student, index) => {
+    const value = members[normalizeStudentName(student)] ?? '';
+    return `
+      <label class="saved-group-member-score-row">
+        <span>${escapeHTML(student)}</span>
+        <input class="form-input" id="saved-group-member-score-${index}" type="number" min="0"
+          value="${escapeHTML(String(value))}" placeholder="Score" />
+      </label>`;
+  }).join('');
+}
+
+function collectSavedGroupMemberScores(group) {
+  const members = {};
+  group.students.forEach((student, index) => {
+    members[normalizeStudentName(student)] = document.getElementById(`saved-group-member-score-${index}`)?.value?.trim() || '';
+  });
+  return members;
+}
+
+async function saveCurrentSavedGroupScore() {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  const group = savedGroupsPageGroups[savedGroupScoreModalIndex];
+  if (!classId || !group) return;
+
+  const period = GROUP_SCORE_STORAGE_PERIOD;
+  const category = GROUP_SCORE_STORAGE_CATEGORY;
+  const activity = 'Groups sheet score';
+  const max = '';
+  const groupSheetScoreColumn = Number(document.getElementById('saved-group-score-column').value) || 2;
+  const groupScore = document.getElementById('saved-group-group-score').value.trim();
+  const members = savedGroupScoreMode === 'individual' ? collectSavedGroupMemberScores(group) : {};
+  const scoreForMembers = savedGroupScoreMode === 'group'
+    ? Object.fromEntries(group.students.map(student => [normalizeStudentName(student), groupScore]))
+    : members;
+
+  if (savedGroupScoreMode === 'group' && groupScore === '') {
+    showToast('Enter a group score first.');
+    return;
+  }
+  if (savedGroupScoreMode === 'individual' && !Object.values(members).some(value => value !== '')) {
+    showToast('Enter at least one student score first.');
+    return;
+  }
+
+  const scoreData = getSavedGroupScoreData(classId, period, category);
+  const groups = { ...(scoreData.groups || {}) };
+  groups[group.id] = {
+    mode: savedGroupScoreMode,
+    groupScore: savedGroupScoreMode === 'group' ? groupScore : '',
+    members,
+    activity,
+    max,
+    savedAt: new Date().toISOString()
+  };
+  storeSavedGroupScoreData(classId, period, category, { activity, max, groups });
+
+  closeSavedGroupScoreModal();
+  renderSavedGroupsPage(getSavedGroupScoreData(classId, period, category));
+  const selectedClass = classList.find(item => item.id === classId);
+  const canSyncGroupsSheet = Boolean(
+    localStorage.getItem('gv_gsheets_script_url') && selectedClass && extractSheetId(selectedClass.url)
+  );
+  await syncSavedGroupScoreToGroupsSheet(classId, group, scoreForMembers, groupSheetScoreColumn);
+  if (!canSyncGroupsSheet) showToast('Score saved locally. Configure Apps Script to sync it to the Groups sheet.');
+  return;
+
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const cls = classList.find(item => item.id === classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  closeSavedGroupScoreModal();
+  renderSavedGroupsPage(getSavedGroupScoreData(classId, period, category));
+
+  if (!scriptUrl || !sheetId) {
+    showToast('Score saved locally. Configure Apps Script to sync it to Sheets.');
+    return;
+  }
+
+  const sheetTabName = savedGroupsPageSheet?.sheetName || period;
+  const prefixes = { Quiz: 'Q', Oral: 'O', Activity: 'G', Exam: 'E' };
+  const headers = [1, 2, 3, 4].map(number => `${prefixes[category] || category}${number}`);
+  const studentNames = group.students;
+  const studentScores = Object.fromEntries(studentNames.map(student => [
+    normalizeStudentName(student), [scoreForMembers[normalizeStudentName(student)] || '', '', '', '']
+  ]));
+  showToast(`Saving ${group.name} scores...`);
+
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        sheetId,
+        tabName: sheetTabName,
+        sheetName: sheetTabName,
+        period,
+        category,
+        categoryId: category,
+        headers,
+        scoreHeaders: headers,
+        maxScores: [max, '', '', ''],
+        perfectScores: [max, '', '', ''],
+        scoreIndexes: [0],
+        activity,
+        studentNames,
+        studentScores,
+        scores: studentScores,
+        scoresByStudent: studentScores
+      })
+    });
+    const result = JSON.parse(await response.text());
+    const writes = Number(result.writeCount || result.updatedCells || 0);
+    if (!response.ok || writes <= 0) throw new Error(result.error || 'No cells were updated.');
+    showToast(`✅ ${group.name} scores saved to Google Sheets.`);
+  } catch (error) {
+    showToast(`⚠️ Saved locally, but Sheets sync failed: ${error.message}`);
+  }
+  await syncSavedGroupScoreToGroupsSheet(classId, group, scoreForMembers, groupSheetScoreColumn);
+}
+
+async function syncSavedGroupScoreToGroupsSheet(classId, group, scoreForMembers, scoreColumn) {
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const cls = classList.find(item => item.id === classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  if (!scriptUrl || !sheetId) return;
+
+  const studentNames = group.students;
+  const studentScores = Object.fromEntries(studentNames.map(student => [
+    normalizeStudentName(student), scoreForMembers[normalizeStudentName(student)] ?? ''
+  ]));
+
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'saveGroupScore',
+        sheetId,
+        tabName: 'Groups',
+        sheetName: 'Groups',
+        scoreColumn,
+        studentNames,
+        studentScores,
+        scores: studentScores
+      })
+    });
+    const result = JSON.parse(await response.text());
+    const writes = Number(result.writeCount || result.updatedCells || 0);
+    if (!response.ok || writes <= 0) throw new Error(result.error || 'No score cells were updated in Groups.');
+    showToast(`✅ ${group.name} score copied to Groups sheet Score ${scoreColumn - 1}.`);
+  } catch (error) {
+    showToast(`⚠️ Gradebook saved, but Groups sheet score sync failed: ${error.message}`);
+  }
+}
 
 document.getElementById('nav-picker').addEventListener('click', () => {
   const select = document.getElementById('picker-class-select');

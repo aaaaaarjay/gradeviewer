@@ -896,3 +896,476 @@ html, body {
   border: 4px solid var(--surface2);
 }
 
+/* ─── GRADEBOOK REFERENCE LAYOUT ─── */
+#scores-workspace.gradebook-workspace {
+  position: relative;
+  background: #fff;
+  color: #111;
+  border: 2px solid #111;
+  border-radius: 4px;
+  padding: 2.5rem 2rem 1.5rem;
+  overflow: visible;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.18);
+}
+
+.gradebook-close {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: #344054;
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 3;
+}
+.gradebook-close:hover { background: #1f2937; }
+
+/* The legacy individual-score controls stay available in code but are not part of this grid view. */
+#scores-workspace.gradebook-workspace > div:first-of-type,
+#scores-workspace.gradebook-workspace > #scores-individual-view {
+  display: none;
+}
+
+#scores-workspace.gradebook-workspace .gradebook-cat-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0 0 2.75rem;
+}
+.scores-class-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.55fr);
+  gap: 1rem;
+  max-width: 760px;
+  align-items: end;
+}
+.scores-setup-help {
+  grid-column: 1 / -1;
+  margin-top: 0.85rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.gradebook-workspace .gradebook-cat-btn {
+  justify-self: center;
+  width: min(100%, 110px);
+  padding: 0.55rem 0.4rem;
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 0;
+  color: #111;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.gradebook-workspace .gradebook-cat-btn:hover,
+.gradebook-workspace .gradebook-cat-btn.active {
+  background: #8bd970;
+  border-color: #111;
+  color: #111;
+  box-shadow: none;
+}
+
+#scores-workspace.gradebook-workspace .gradebook-grid-panel {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  margin: 0;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header {
+  display: contents !important;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:first-child {
+  display: none;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child {
+  order: 3;
+  justify-content: flex-end;
+  margin-top: 1.75rem;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child button {
+  border: 2px solid #111;
+  border-radius: 0;
+  background: #8bd970;
+  color: #111;
+  padding: 0.6rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+}
+#scores-workspace.gradebook-workspace #add-gradebook-column-btn,
+#scores-workspace.gradebook-workspace button[onclick="setAllGradebook()"] {
+  display: none !important;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel > div[style*="overflow-x:auto"] {
+  order: 2;
+  padding: 0 !important;
+  overflow-x: auto;
+}
+
+#scores-workspace.gradebook-workspace .gradebook-table {
+  width: 100%;
+  min-width: 620px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  color: #111;
+  font-size: 0.9rem;
+}
+#scores-workspace.gradebook-workspace .gradebook-table th,
+#scores-workspace.gradebook-workspace .gradebook-table td {
+  border: 2px solid #111;
+}
+#scores-workspace.gradebook-workspace .gb-name-col,
+#scores-workspace.gradebook-workspace .gb-name-cell {
+  width: 20%;
+  min-width: 150px;
+  background: #fff;
+  color: #111;
+  border-right: 2px solid #111;
+}
+#scores-workspace.gradebook-workspace .gb-name-col {
+  padding: 0.7rem 0.8rem;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  text-align: center;
+}
+#scores-workspace.gradebook-workspace .gb-name-cell {
+  padding: 0.65rem 0.8rem;
+  font-weight: 500;
+  text-align: left;
+}
+#scores-workspace.gradebook-workspace .gb-col-header {
+  min-width: 145px;
+  height: 52px;
+  padding: 0.35rem;
+  background: #fff;
+  border: 2px solid #111;
+}
+#scores-workspace.gradebook-workspace .gb-max-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0.25rem;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #111;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-align: center;
+}
+#scores-workspace.gradebook-workspace .gb-max-input::placeholder {
+  color: #111;
+  opacity: 1;
+}
+#scores-workspace.gradebook-workspace .gb-score-cell {
+  padding: 0.45rem 0.65rem;
+  background: #fff;
+}
+#scores-workspace.gradebook-workspace .gb-score-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 0.25rem;
+  border: 2px solid #111;
+  border-radius: 0;
+  background: #fff;
+  color: #111;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+#scores-workspace.gradebook-workspace .gb-score-input:focus,
+#scores-workspace.gradebook-workspace .gb-max-input:focus {
+  border-color: #4d9f3c;
+  outline: 2px solid rgba(139,217,112,0.55);
+  outline-offset: 1px;
+}
+#scores-workspace.gradebook-workspace .gradebook-table tbody tr:hover .gb-name-cell,
+#scores-workspace.gradebook-workspace .gradebook-table tbody tr:hover .gb-score-cell {
+  background: #f7fff4;
+}
+
+@media (max-width: 700px) {
+  .scores-class-picker { grid-template-columns: 1fr; }
+  .scores-setup-help { grid-column: 1; }
+  #scores-workspace.gradebook-workspace { padding: 2.25rem 0.75rem 1rem; }
+  #scores-workspace.gradebook-workspace .gradebook-cat-tabs { gap: 0.35rem; margin-bottom: 1.5rem; }
+  .gradebook-workspace .gradebook-cat-btn { font-size: 0.8rem; }
+}
+
+/* ─── GRADEBOOK FORMAT USING THE ORIGINAL PORTAL THEME ─── */
+#scores-workspace.gradebook-workspace {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  overflow: visible;
+  box-shadow: var(--shadow);
+}
+.gradebook-close {
+  top: -10px;
+  right: -10px;
+  width: 32px;
+  height: 32px;
+  background: var(--surface3);
+  color: var(--text);
+  font-size: 1.25rem;
+}
+.gradebook-close:hover { background: var(--accent); }
+
+#scores-workspace.gradebook-workspace .gradebook-cat-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+}
+.gradebook-workspace .gradebook-cat-btn {
+  width: min(100%, 130px);
+  padding: 0.55rem 0.75rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.gradebook-workspace .gradebook-cat-btn:hover {
+  background: rgba(108,99,255,0.08);
+  border-color: var(--accent);
+  color: var(--accent2);
+}
+.gradebook-workspace .gradebook-cat-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(108,99,255,0.4);
+}
+
+#scores-workspace.gradebook-workspace .gradebook-grid-panel {
+  background: var(--surface);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header {
+  display: contents !important;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:first-child {
+  display: none;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child {
+  order: 3;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child button {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child button:hover {
+  background: rgba(255,255,255,0.1);
+}
+#scores-workspace.gradebook-workspace .gradebook-grid-panel .panel-header > div:last-child button[onclick="saveGradebook()"] {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: transparent;
+  color: #fff;
+}
+
+#scores-workspace.gradebook-workspace .gradebook-table {
+  color: var(--text);
+}
+#scores-workspace.gradebook-workspace .gradebook-table th,
+#scores-workspace.gradebook-workspace .gradebook-table td {
+  border: 1px solid var(--border2);
+}
+#scores-workspace.gradebook-workspace .gb-name-col,
+#scores-workspace.gradebook-workspace .gb-name-cell {
+  background: var(--surface2);
+  color: var(--text);
+  border-right: 2px solid var(--border);
+}
+#scores-workspace.gradebook-workspace .gb-name-col {
+  padding: 0.6rem 1rem;
+  font-size: 0.7rem;
+  letter-spacing: 1px;
+  text-align: left;
+}
+#scores-workspace.gradebook-workspace .gb-name-cell {
+  padding: 0.5rem 1rem;
+}
+#scores-workspace.gradebook-workspace .gb-col-header {
+  min-width: 145px;
+  height: 52px;
+  padding: 0.3rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+#scores-workspace.gradebook-workspace .gb-max-input {
+  min-height: 32px;
+  border: 1px solid rgba(108,99,255,0.25);
+  border-radius: 5px;
+  background: rgba(108,99,255,0.08);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.gradebook-workspace .gb-column-label {
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#scores-workspace.gradebook-workspace .gb-max-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+#scores-workspace.gradebook-workspace .gb-score-cell {
+  padding: 0.3rem 0.4rem;
+  background: transparent;
+}
+#scores-workspace.gradebook-workspace .gb-score-input {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+#scores-workspace.gradebook-workspace .gb-score-input:focus {
+  border-color: var(--accent);
+  background: rgba(108,99,255,0.08);
+  outline: none;
+}
+#scores-workspace.gradebook-workspace .gb-max-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+#scores-workspace.gradebook-workspace .gradebook-table tbody tr:hover .gb-name-cell,
+#scores-workspace.gradebook-workspace .gradebook-table tbody tr:hover .gb-score-cell {
+  background: rgba(108,99,255,0.04);
+}
+
+/* Saved groups scoring page */
+.saved-groups-controls {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  gap: 0.9rem;
+  align-items: end;
+}
+.saved-groups-class-only { grid-template-columns: minmax(260px, 420px) 1fr; }
+.saved-groups-class-help { align-self: center; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.saved-groups-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.saved-group-card {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+}
+.saved-group-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+.saved-groups-panel-subtitle { margin-top: 0.25rem; color: var(--muted); font-size: 0.8rem; }
+.saved-group-name { font-weight: 700; color: var(--text); }
+.saved-group-count { margin-top: 0.2rem; color: var(--muted); font-size: 0.78rem; }
+.saved-group-card-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+.saved-group-members { display: flex; flex-direction: column; gap: 0.35rem; }
+.saved-group-members span {
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.saved-group-members .saved-group-no-members,
+.saved-groups-empty { color: var(--muted); }
+.saved-groups-empty {
+  padding: 2rem;
+  text-align: center;
+  border: 1px dashed var(--border2);
+  border-radius: var(--radius-sm);
+}
+.saved-group-status {
+  margin-top: 0.85rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.saved-group-status.has-score { color: var(--green); }
+.saved-group-score-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.72);
+}
+.saved-group-score-dialog {
+  width: min(600px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.saved-group-score-header,
+.saved-group-score-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.saved-group-score-footer { justify-content: flex-end; border-top: 1px solid var(--border); border-bottom: 0; }
+.saved-group-score-context { margin-top: 0.3rem; color: var(--muted); font-size: 0.8rem; }
+.saved-group-score-body { padding: 1.25rem; }
+.saved-group-score-column-field { max-width: 260px; margin-bottom: 1.25rem; }
+.saved-group-score-mode { display: flex; gap: 0.6rem; margin-bottom: 1.25rem; }
+.saved-group-main-score { max-width: 220px; margin-top: 0.4rem; }
+.saved-group-member-score-list { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.4rem; }
+.saved-group-member-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.saved-group-member-score-row span { min-width: 0; }
+.saved-group-member-score-row .form-input { width: 110px; flex: 0 0 110px; text-align: center; }
+@media (max-width: 900px) {
+  .saved-groups-controls,
+  .saved-groups-class-only { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+}
+@media (max-width: 520px) {
+  .saved-groups-controls,
+  .saved-groups-class-only { grid-template-columns: 1fr; }
+  .saved-group-score-mode { flex-direction: column; }
+  .saved-group-member-score-row { align-items: flex-start; flex-direction: column; }
+  .saved-group-member-score-row .form-input { width: 100%; flex-basis: auto; }
+}

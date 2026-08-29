@@ -176,7 +176,7 @@
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
           <div>
             <div class="page-title">📝 Score Recorder</div>
-            <div class="page-sub">Record quiz, oral, and activity scores per class.</div>
+          <div class="page-sub">Select a class, then enter up to four scores for Quiz, Oral, Activity, and Exam.</div>
           </div>
           <button class="btn btn-ghost" onclick="toggleFullscreen('page-scores')" title="Fullscreen">⛶</button>
         </div>
@@ -184,10 +184,10 @@
         <!-- Step 1: Select Class -->
         <div class="panel" id="scores-setup-panel">
           <div class="panel-header">
-            <div class="panel-title">① Select Class &amp; Activity</div>
+            <div class="panel-title">① Select a Class</div>
           </div>
           <div class="panel-body">
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:1rem; align-items:end;">
+            <div class="scores-class-picker">
               <div class="form-group">
                 <label class="form-label">Class</label>
                 <select id="scores-class-select" class="form-input" onchange="loadClassForScores()">
@@ -195,43 +195,22 @@
                 </select>
               </div>
               <div class="form-group">
-                <label class="form-label">Category</label>
-                <select id="scores-category" class="form-input">
-                  <option value="Quiz">📄 Quiz</option>
-                  <option value="Oral">🗣️ Oral Recitation</option>
-                  <option value="Activity">✏️ Activity</option>
-                  <option value="Performance Task">🎭 Performance Task</option>
-                  <option value="Homework">📚 Homework</option>
-                  <option value="Exam">📋 Exam</option>
-                  <option value="Project">🏗️ Project</option>
-                  <option value="Seatwork">💺 Seatwork</option>
+                <label class="form-label">Grading Period</label>
+                <select id="scores-period-select" class="form-input" onchange="changeScorePeriod()">
+                  <option value="Prelim">Prelim</option>
+                  <option value="Midterm">Midterm</option>
+                  <option value="Semifinal">Semifinal</option>
+                  <option value="Final">Final</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label class="form-label">Activity Name</label>
-                <input type="text" id="scores-activity-name" class="form-input" placeholder="e.g. Quiz 1" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Max Score</label>
-                <input type="number" id="scores-max-score" class="form-input" style="width:90px;" value="100" min="1" />
-              </div>
+              <p class="scores-setup-help">Choose a class and grading period to load the correct gradebook. Student names are read from every tab in that spreadsheet. Then select a category tab and enter each activity’s max score above the score columns.</p>
             </div>
           </div>
         </div>
 
         <!-- Score Entry Workspace -->
-        <div id="scores-workspace" class="hidden">
-
-          <!-- Tabs: Individual / Group -->
-          <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
-            <button class="btn btn-primary" id="scores-tab-individual" onclick="switchScoresTab('individual')">👤 Individual</button>
-            <button class="btn btn-ghost" id="scores-tab-group" onclick="switchScoresTab('group')">👥 Group Score</button>
-            <div style="flex:1;"></div>
-            <input type="text" id="scores-search" class="form-input" style="max-width:220px;" placeholder="🔍 Search student…" oninput="filterScoresTable()" />
-            <button class="btn btn-ghost" onclick="copyScoresColumn()" title="Copy scores to paste into Google Sheets">📋 Copy Column</button>
-            <button class="btn btn-ghost" onclick="setAllScores()">✏️ Set All</button>
-            <button class="btn btn-primary" onclick="saveAllScores()">💾 Save Scores</button>
-          </div>
+        <div id="scores-workspace" class="hidden gradebook-workspace">
+          <button class="gradebook-close" type="button" onclick="closeGradebookWorkspace()" aria-label="Close gradebook">×</button>
 
           <!-- Individual Tab -->
           <div id="scores-individual-view">
@@ -256,20 +235,23 @@
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
           <!-- Category Tab Bar -->
           <div class="gradebook-cat-tabs" id="gradebook-cat-tabs">
             <!-- rendered by JS -->
           </div>
 
           <!-- Grid Panel -->
-          <div class="panel">
+          <div class="panel gradebook-grid-panel">
             <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
               <div>
                 <div class="panel-title" id="gradebook-cat-title">Quiz</div>
-                <div style="color:var(--muted); font-size:0.8rem;" id="gradebook-cat-sub">Enter scores below. Tab/Enter to move between cells.</div>
+                <div style="color:var(--muted); font-size:0.8rem;" id="gradebook-cat-sub">Enter up to 4 scores. Tab/Enter to move between cells.</div>
               </div>
               <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
-                <button class="btn btn-ghost btn-sm" onclick="addGradebookColumn()">➕ Add Column</button>
+                <button class="btn btn-ghost btn-sm" id="add-gradebook-column-btn" onclick="addGradebookColumn()">➕ Add Column</button>
                 <button class="btn btn-ghost btn-sm" onclick="setAllGradebook()">✏️ Set All</button>
                 <button class="btn btn-ghost btn-sm" onclick="copyGradebookForSheets()" title="Copy to paste into Google Sheets">📋 Copy</button>
                 <button class="btn btn-primary btn-sm" onclick="saveGradebook()">💾 Save</button>
@@ -289,11 +271,8 @@
           <div class="panel-header">
             <div class="panel-title">📋 Score History</div>
             <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-              <select id="history-class-filter" class="form-input" style="font-size:0.8rem; padding:0.3rem;" onchange="renderScoreHistory()">
-                <option value="">All Classes</option>
-              </select>
               <button class="btn btn-ghost btn-sm" onclick="exportScoresCSV()">⬇️ Export CSV</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteAllScores()">🗑️ Delete All</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteAllScores()">🗑️ Clear Class Scores</button>
               <button class="btn btn-ghost btn-sm" onclick="renderScoreHistory()">🔄 Refresh</button>
             </div>
           </div>
@@ -447,6 +426,7 @@
               </select>
             </div>
             <button class="btn btn-primary" id="btn-load-groups" onclick="loadClassForGroups()">Load Students</button>
+            <button class="btn btn-ghost" onclick="openSavedGroupsPage()">📁 Saved Groups</button>
           </div>
         </div>
 
@@ -499,6 +479,86 @@
       </div>
 
       <!-- ── RANDOM PICKER PAGE ── -->
+      <div class="admin-page" id="page-saved-groups">
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">👥 Saved Groups</div>
+            <div class="page-sub">View saved groups and record one score for every group member.</div>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-danger" onclick="deleteAllSavedGroups()">🗑 Delete All Groups</button>
+            <button class="btn btn-ghost" onclick="showPage('groups')">← Groups Manager</button>
+            <button class="btn btn-ghost" onclick="toggleFullscreen('page-saved-groups')" title="Toggle Fullscreen">⛶</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Select Class</div></div>
+          <div class="panel-body saved-groups-controls saved-groups-class-only">
+            <div class="form-group">
+              <label class="form-label">Class</label>
+              <select id="saved-groups-class-select" class="form-input" onchange="loadSavedGroupsPage()">
+                <option value="">-- Select a Class --</option>
+              </select>
+            </div>
+            <p class="saved-groups-class-help">Groups and group scores are managed in the Groups sheet.</p>
+          </div>
+        </div>
+
+        <div id="saved-groups-workspace" class="hidden">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <div class="panel-title" id="saved-groups-title">Saved Groups</div>
+                <div class="saved-groups-panel-subtitle">Open a group to score its members.</div>
+              </div>
+            </div>
+            <div class="panel-body">
+              <p id="saved-groups-help" class="scores-setup-help">Click <strong>Score</strong> beside a group, then choose Group Score or Individual Scores.</p>
+              <div id="saved-groups-list" class="saved-groups-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved group scoring modal -->
+        <div id="saved-group-score-modal" class="saved-group-score-modal hidden">
+          <div class="saved-group-score-dialog">
+            <div class="saved-group-score-header">
+              <div>
+                <div class="panel-title" id="saved-group-score-title">Score Group</div>
+                <div class="saved-group-score-context" id="saved-group-score-context"></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="closeSavedGroupScoreModal()">✕</button>
+            </div>
+            <div class="saved-group-score-body">
+              <div class="form-group saved-group-score-column-field">
+                <label class="form-label">Save score in Groups sheet</label>
+                <select id="saved-group-score-column" class="form-input">
+                  <option value="2">Score 1</option>
+                  <option value="3">Score 2</option>
+                </select>
+              </div>
+              <div class="saved-group-score-mode">
+                <button id="saved-group-mode-group" class="btn btn-primary" onclick="setSavedGroupScoreMode('group')">👥 Group Score</button>
+                <button id="saved-group-mode-individual" class="btn btn-ghost" onclick="setSavedGroupScoreMode('individual')">👤 Individual Scores</button>
+              </div>
+              <div id="saved-group-score-group-panel">
+                <label class="form-label">Score applied to every member</label>
+                <input id="saved-group-group-score" class="form-input saved-group-main-score" type="number" min="0" placeholder="Enter group score" />
+              </div>
+              <div id="saved-group-score-individual-panel" class="hidden">
+                <label class="form-label">Score for each member</label>
+                <div id="saved-group-member-score-list" class="saved-group-member-score-list"></div>
+              </div>
+            </div>
+            <div class="saved-group-score-footer">
+              <button class="btn btn-ghost" onclick="closeSavedGroupScoreModal()">Cancel</button>
+              <button class="btn btn-primary" onclick="saveCurrentSavedGroupScore()">💾 Save Score</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="admin-page" id="page-picker">
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
           <div>
