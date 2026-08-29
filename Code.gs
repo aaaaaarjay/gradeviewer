@@ -30,6 +30,9 @@ function doPost(e) {
     if (String(payload.action || '').toLowerCase() === 'deleteallgroups') {
       return deleteAllGroupsFromSheet(spreadsheet);
     }
+    if (String(payload.action || '').toLowerCase() === 'saveattendance') {
+      return saveAttendanceSheet(spreadsheet, payload);
+    }
     var sheet = spreadsheet.getSheetByName(tabName);
     if (!sheet) {
       return jsonResponse({ success: false, error: 'Sheet tab not found: ' + tabName });
@@ -117,6 +120,165 @@ function doPost(e) {
   } catch (error) {
     return jsonResponse({ success: false, error: String(error && error.message || error) });
   }
+}
+
+function saveAttendanceSheet(spreadsheet, payload) {
+  var sheet = spreadsheet.getSheetByName('Attendance');
+  if (!sheet) return jsonResponse({ success: false, error: 'Attendance sheet was not found.' });
+
+  var period = String(payload.period || 'Prelim').trim();
+  var dateKey = normalizeAttendanceDate(payload.date);
+  if (!dateKey) return jsonResponse({ success: false, error: 'A valid attendance date is required.' });
+  var values = sheet.getDataRange().getValues();
+  var layout = findAttendanceLayout(values, period);
+  if (!layout) return jsonResponse({ success: false, error: 'The ' + period + ' block could not be found in the Attendance sheet.' });
+
+  var dateColumn = -1;
+  for (var c = layout.blockStart; c < layout.totalCol; c++) {
+    if (sheet.isColumnHiddenByUser(c + 1)) continue;
+    if (normalizeAttendanceDate(values[layout.dateRow][c]) === dateKey) {
+      dateColumn = c;
+      break;
+    }
+  }
+
+  if (dateColumn < 0) {
+    // Use the first unused day column already provided by the template.
+    for (var blankCol = layout.blockStart; blankCol < layout.totalCol; blankCol++) {
+      if (sheet.isColumnHiddenByUser(blankCol + 1)) continue;
+      var hasHeader = false;
+      // In this Attendance template the date row and the student-name header
+      // can be the same row. Never reuse a column that already contains a date.
+      if (normalizeAttendanceDate(values[layout.dateRow][blankCol])) hasHeader = true;
+      for (var hr = layout.sectionRow + 1; hr < layout.headerRow; hr++) {
+        if (String(values[hr][blankCol] == null ? '' : values[hr][blankCol]).trim() !== '') {
+          hasHeader = true;
+          break;
+        }
+      }
+      if (!hasHeader) { dateColumn = blankCol; break; }
+    }
+  }
+
+  if (dateColumn < 0) {
+    // If the period has no spare day column, insert one immediately before TOTAL.
+    sheet.insertColumnBefore(layout.totalCol + 1);
+    dateColumn = layout.totalCol;
+    layout.totalCol += 1;
+    values = sheet.getDataRange().getValues();
+  }
+
+  sheet.getRange(layout.dateRow + 1, dateColumn + 1).setValue(attendanceDateSerial(dateKey));
+  sheet.getRange(layout.dateRow + 1, dateColumn + 1).setNumberFormat('dd-mmm-yy');
+
+  var statusMap = payload.attendance || {};
+  var studentNames = Array.isArray(payload.studentNames) ? payload.studentNames : Object.keys(statusMap);
+  var changedCells = 1;
+  var matchedStudents = 0;
+  var touchedRows = [];
+  for (var si = 0; si < studentNames.length; si++) {
+    var studentKey = normalizeName(studentNames[si]);
+    if (!studentKey) continue;
+    var row = findAttendanceStudentRow(values, layout, studentKey);
+    if (row < 0) continue;
+    matchedStudents++;
+    touchedRows.push(row);
+    var isPresent = statusMap[studentKey] === true || String(statusMap[studentKey]).toLowerCase() === 'true' || String(statusMap[studentKey]) === '1';
+    var cell = sheet.getRange(row + 1, dateColumn + 1);
+    if (isPresent) cell.setValue(1);
+    else cell.clearContent();
+    changedCells++;
+  }
+
+  // Preserve existing formulas. For templates without a formula, keep TOTAL
+  // useful by counting the present marks in the period's date columns.
+  var uniqueRows = {};
+  touchedRows.forEach(function(row) { uniqueRows[row] = true; });
+  Object.keys(uniqueRows).forEach(function(rowText) {
+    var row = Number(rowText);
+    var totalCell = sheet.getRange(row + 1, layout.totalCol + 1);
+    if (totalCell.getFormula()) return;
+    var count = 0;
+    for (var dc = layout.blockStart; dc < layout.totalCol; dc++) {
+      var mark = String(sheet.getRange(row + 1, dc + 1).getValue()).trim().toLowerCase();
+      if (mark === '1' || mark === 'p' || mark === 'present') count++;
+    }
+    totalCell.setValue(count);
+    changedCells++;
+  });
+
+  SpreadsheetApp.flush();
+  return jsonResponse({ success: matchedStudents > 0 && changedCells > 0, action: 'saveAttendance', writeCount: changedCells, matchedStudents: matchedStudents, date: dateKey, period: period, tabName: 'Attendance' });
+}
+
+function normalizeAttendancePeriod(value) {
+  var text = normalizeHeader(value);
+  if (text.indexOf('PRELIM') >= 0) return 'Prelim';
+  if (text.indexOf('MIDTERM') >= 0 || text === 'MID') return 'Midterm';
+  if (text.indexOf('SEMI') >= 0) return 'Semifinal';
+  if (text.indexOf('FINAL') >= 0) return 'Final';
+  return '';
+}
+
+function normalizeAttendanceDate(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var text = String(value == null ? '' : value).trim();
+  if (!text) return '';
+  var iso = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (iso) return iso[1] + '-' + ('0' + iso[2]).slice(-2) + '-' + ('0' + iso[3]).slice(-2);
+  var parsed = new Date(text);
+  return isNaN(parsed.getTime()) ? '' : Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function attendanceDateSerial(dateKey) {
+  var parts = String(dateKey).split('-').map(Number);
+  // Write a date serial instead of a JavaScript Date. Date objects can shift
+  // by one day when the Apps Script and spreadsheet timezones differ.
+  return Math.floor(Date.UTC(parts[0], parts[1] - 1, parts[2]) / 86400000) + 25569;
+}
+
+function findAttendanceLayout(values, period) {
+  var sections = [];
+  for (var r = 0; r < Math.min(values.length, 15); r++) {
+    for (var c = 0; c < values[r].length; c++) {
+      var found = normalizeAttendancePeriod(values[r][c]);
+      if (found) sections.push({ row: r, col: c, period: found });
+    }
+  }
+  var selected = sections.find(function(item) { return item.period === period; });
+  if (!selected) return null;
+  var next = sections.filter(function(item) { return item.row === selected.row && item.col > selected.col; }).sort(function(a, b) { return a.col - b.col; })[0];
+  var blockEnd = next ? next.col : values[0].length;
+  var header = findStudentHeader(values);
+  if (header.row < 0) return null;
+
+  var totalCol = -1;
+  for (var hr = selected.row; hr <= Math.min(values.length - 1, header.row + 1); hr++) {
+    for (var hc = selected.col; hc < blockEnd; hc++) {
+      var label = String(values[hr][hc] == null ? '' : values[hr][hc]).trim().toLowerCase();
+      if ((label === 'total' || label === 'ttl') && totalCol < 0) totalCol = hc;
+    }
+  }
+  if (totalCol < 0) totalCol = blockEnd;
+
+  var dateRow = selected.row + 1;
+  var bestCount = -1;
+  for (var dr = selected.row + 1; dr < header.row; dr++) {
+    var count = 0;
+    for (var dc = selected.col; dc < totalCol; dc++) if (normalizeAttendanceDate(values[dr][dc])) count++;
+    if (count > bestCount) { bestCount = count; dateRow = dr; }
+  }
+  return { sectionRow: selected.row, blockStart: selected.col, blockEnd: blockEnd, totalCol: totalCol, dateRow: dateRow, headerRow: header.row, nameCol: header.nameCol };
+}
+
+function findAttendanceStudentRow(values, layout, wantedName) {
+  for (var r = layout.headerRow + 1; r < values.length; r++) {
+    if (normalizeName(values[r][layout.nameCol]) === wantedName) return r;
+    for (var c = Math.max(0, layout.nameCol - 1); c <= Math.min(values[r].length - 1, layout.nameCol + 2); c++) {
+      if (normalizeName(values[r][c]) === wantedName) return r;
+    }
+  }
+  return -1;
 }
 
 function saveGroupsSheet(spreadsheet, payload) {

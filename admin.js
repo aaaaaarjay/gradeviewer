@@ -15,6 +15,8 @@ let classList = [];
 let bypassSectionCode = false;
 let bypassStudentId   = false;
 let addFormVisible    = true;
+let reorderMode       = false;
+let draggedClassId    = null;
 
 /* ─── TOAST ─── */
 function showToast(msg, duration = 3500) {
@@ -153,6 +155,7 @@ function showPage(id) {
   document.getElementById('page-' + id).classList.add('active');
   document.getElementById('nav-' + id)?.classList.add('active');
   document.getElementById('topbar-title').textContent = PAGE_TITLES[id] || id;
+  if (id === 'attendance' && typeof initAttendancePage === 'function') initAttendancePage();
 }
 
 /* ═══════════════════════════════════════════════
@@ -173,10 +176,13 @@ function renderClassTable() {
   }
 
   const rows = classList.map(cls => `
-    <tr id="row-${cls.id}">
+    <tr id="row-${cls.id}" class="${reorderMode ? 'reorder-row' : ''}"
+        ${reorderMode ? `draggable="true" ondragstart="startClassDrag(event, '${escapeAttr(cls.id)}')" ondragover="allowClassDrop(event)" ondragleave="clearClassDropIndicator(event)" ondrop="dropClass(event, '${escapeAttr(cls.id)}')" ondragend="endClassDrag()"` : ''}>
+      ${reorderMode ? '<td class="class-reorder-handle" title="Drag to reorder">⠿</td>' : ''}
       <td>
         <div class="class-name-cell">${escapeHTML(cls.name)}</div>
         ${cls.description ? `<div class="class-desc-cell">${escapeHTML(cls.description)}</div>` : ''}
+        ${cls.classKey ? `<div class="class-key-display">🔐 Section code: <strong>${escapeHTML(cls.classKey)}</strong></div>` : '<div class="class-key-display missing">No section code</div>'}
       </td>
       <td class="class-url-cell">
         ${cls.url
@@ -190,8 +196,12 @@ function renderClassTable() {
       </td>
       <td>
         <div class="table-actions">
-          <button class="btn btn-ghost btn-sm" onclick="startEdit('${escapeAttr(cls.id)}')">✏️ Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteClassEntry('${escapeAttr(cls.id)}')">🗑️</button>
+          ${reorderMode
+            ? '<span class="reorder-hint">Drag to move</span>'
+            : ''}
+          ${reorderMode ? '' : `
+            <button class="btn btn-ghost btn-sm" onclick="startEdit('${escapeAttr(cls.id)}')">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteClassEntry('${escapeAttr(cls.id)}')">🗑️</button>`}
         </div>
       </td>
     </tr>
@@ -201,14 +211,63 @@ function renderClassTable() {
     <table class="class-table">
       <thead>
         <tr>
+          ${reorderMode ? '<th class="class-reorder-heading"></th>' : ''}
           <th>Class Name</th>
           <th>Google Sheet</th>
           <th>Access</th>
-          <th style="text-align:right;">Actions</th>
+          <th style="text-align:right;">Actions / Order</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+}
+
+function toggleReorderMode() {
+  reorderMode = !reorderMode;
+  const button = document.getElementById('reorder-classes-btn');
+  if (button) button.textContent = reorderMode ? '✅ Done Reordering' : '↕ Reorder Classes';
+  renderClassTable();
+}
+
+function startClassDrag(event, id) {
+  draggedClassId = id;
+  event.dataTransfer.effectAllowed = 'move';
+  event.currentTarget.classList.add('dragging-class');
+}
+
+function allowClassDrop(event) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.drop-target-class').forEach(row => row.classList.remove('drop-target-class'));
+  if (event.currentTarget.id !== `row-${draggedClassId}`) {
+    event.currentTarget.classList.add('drop-target-class');
+  }
+}
+
+function clearClassDropIndicator(event) {
+  event.currentTarget.classList.remove('drop-target-class');
+}
+
+function dropClass(event, targetId) {
+  event.preventDefault();
+  if (!draggedClassId || draggedClassId === targetId) return;
+
+  const fromIndex = classList.findIndex(cls => cls.id === draggedClassId);
+  const targetIndex = classList.findIndex(cls => cls.id === targetId);
+  if (fromIndex < 0 || targetIndex < 0) return;
+
+  const [moved] = classList.splice(fromIndex, 1);
+  classList.splice(targetIndex, 0, moved);
+  draggedClassId = null;
+  renderClassTable();
+  saveClassList().then(() => showToast('✅ Class order saved.'));
+}
+
+function endClassDrag() {
+  draggedClassId = null;
+  document.querySelectorAll('.dragging-class, .drop-target-class').forEach(row => {
+    row.classList.remove('dragging-class', 'drop-target-class');
+  });
 }
 
 function toggleAddForm() {

@@ -1397,6 +1397,392 @@ async function syncSavedGroupScoreToGroupsSheet(classId, group, scoreForMembers,
   }
 }
 
+/* ── ATTENDANCE ─────────────────────────────────────────────────────────────
+   Attendance uses the existing Attendance tab. The browser reads the roster
+   and existing date values from that tab; Apps Script performs the write so
+   the workbook's four period blocks remain intact. */
+let attendanceState = {
+  classId: '', period: 'Prelim', date: '', students: [], records: {},
+  photos: {}, showPhotos: false, editIndex: -1, requestId: 0
+};
+let attendanceNotesTimer = null;
+
+const ATTENDANCE_PERIOD_ALIASES = {
+  Prelim: ['prelim', 'preliminary'],
+  Midterm: ['midterm', 'mid'],
+  Semifinal: ['semifinal', 'semi-final', 'semi finals', 'semi-finals'],
+  Final: ['final', 'finals']
+};
+
+function attendanceKey(classId, period, date) {
+  return `gv_attendance_${classId}_${period}_${date}`;
+}
+
+function attendanceNormalizeDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const date = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
+    return attendanceNormalizeDate(date);
+  }
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const iso = text.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, '0')}-${String(iso[3]).padStart(2, '0')}`;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return attendanceNormalizeDate(parsed);
+}
+
+function attendancePeriodMatch(value) {
+  const text = normalizeSheetName(value);
+  return Object.entries(ATTENDANCE_PERIOD_ALIASES).find(([, aliases]) =>
+    aliases.some(alias => normalizeSheetName(alias) === text || text.includes(normalizeSheetName(alias)))
+  )?.[0] || '';
+}
+
+function findAttendanceLayout(rows, period) {
+  if (!rows?.length) return null;
+  const sectionCells = [];
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    rows[r].forEach((value, col) => {
+      const found = attendancePeriodMatch(value);
+      if (found) sectionCells.push({ row: r, col, period: found });
+    });
+  }
+  const sections = sectionCells.filter(item => ['Prelim', 'Midterm', 'Semifinal', 'Final'].includes(item.period));
+  const selected = sections.find(item => item.period === period);
+  if (!selected) return null;
+  const starts = sections.filter(item => item.row === selected.row && item.col > selected.col).sort((a, b) => a.col - b.col);
+  const next = starts[0];
+  const blockEnd = next ? next.col : Math.max(...rows.map(row => row.length), selected.col + 1);
+
+  let nameHeader = null;
+  for (let r = 0; r < Math.min(rows.length, 20); r++) {
+    const col = rows[r].findIndex(value => {
+      const text = String(value || '').toLowerCase().trim();
+      return text === 'name' || text === 'names' || text === "student's name" || (text.includes('student') && text.includes('name'));
+    });
+    if (col >= 0) { nameHeader = { row: r, col }; break; }
+  }
+  if (!nameHeader) return null;
+
+  let totalCol = -1;
+  for (let r = selected.row; r <= Math.min(rows.length - 1, nameHeader.row + 1); r++) {
+    for (let c = selected.col; c < blockEnd; c++) {
+      const value = String(rows[r]?.[c] || '').toLowerCase().trim();
+      if ((value === 'total' || value === 'ttl') && totalCol < 0) totalCol = c;
+    }
+  }
+  if (totalCol < 0) totalCol = blockEnd;
+
+  let dateRow = selected.row + 1;
+  let bestDateCount = -1;
+  for (let r = selected.row + 1; r < nameHeader.row; r++) {
+    let count = 0;
+    for (let c = selected.col; c < totalCol; c++) if (attendanceNormalizeDate(rows[r]?.[c])) count++;
+    if (count > bestDateCount) { bestDateCount = count; dateRow = r; }
+  }
+
+  const dateColumns = [];
+  for (let c = selected.col; c < totalCol; c++) {
+    const date = attendanceNormalizeDate(rows[dateRow]?.[c]);
+    if (date) dateColumns.push({ col: c, date });
+  }
+
+  const students = [];
+  for (let r = nameHeader.row + 1; r < rows.length; r++) {
+    const name = findRosterNameInRow(rows[r], nameHeader.col);
+    if (name) students.push({ name, row: r });
+  }
+  return { period, sectionRow: selected.row, blockStart: selected.col, blockEnd, totalCol, dateRow, nameCol: nameHeader.col, headerRow: nameHeader.row, dateColumns, students };
+}
+
+function attendanceReadLocal(key, fallback = {}) {
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch (_) { return fallback; }
+}
+
+function populateAttendanceClassSelect() {
+  const select = document.getElementById('attendance-class-select');
+  if (!select) return;
+  const current = attendanceState.classId || select.value;
+  select.innerHTML = '<option value="">-- Select a Class --</option>' + classList.map(cls => `<option value="${escapeAttr(cls.id)}">${escapeHTML(cls.name)}</option>`).join('');
+  if (classList.some(cls => cls.id === current)) select.value = current;
+}
+
+function attendanceScheduleDays(cls, rows = []) {
+  let source = `${cls?.name || ''} ${cls?.description || ''}`.toUpperCase();
+  for (const row of rows.slice(0, 8)) {
+    row.forEach((value, index) => {
+      if (/^days?:?$/i.test(String(value || '').trim())) {
+        source += ` ${row.slice(index + 1, index + 7).join(' ')}`.toUpperCase();
+      }
+    });
+  }
+  if (/\bTTH\b|TUE(?:SDAY)?\s*[/,&-]\s*THU(?:RSDAY)?/.test(source)) return [2, 4];
+  if (/\bMW\b|MON(?:DAY)?\s*[/,&-]\s*WED(?:NESDAY)?/.test(source)) return [1, 3];
+  if (/\bFS\b|FRI(?:DAY)?\s*[/,&-]\s*SAT(?:URDAY)?/.test(source)) return [5, 6];
+  return [0, 1, 2, 3, 4, 5, 6];
+}
+
+function localAttendanceDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function populateAttendanceDateOptions(layout = null, rows = []) {
+  const select = document.getElementById('attendance-date-select');
+  const help = document.getElementById('attendance-date-help');
+  if (!select || !attendanceState.classId) return;
+  const cls = classList.find(item => item.id === attendanceState.classId);
+  const allowedDays = attendanceScheduleDays(cls, rows);
+  const isKnownSchedule = allowedDays.length < 7;
+  const options = new Map();
+  const addDate = date => {
+    if (allowedDays.includes(date.getDay())) options.set(localAttendanceDateKey(date), date);
+  };
+  const today = new Date();
+  const start = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+  const end = new Date(today.getFullYear() + 1, 11, 31);
+  for (const date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) addDate(new Date(date));
+  (layout?.dateColumns || []).forEach(item => {
+    const date = new Date(`${item.date}T00:00:00`);
+    if (!Number.isNaN(date.getTime())) addDate(date);
+  });
+  const todayKey = localAttendanceDateKey(today);
+  const latestKey = Array.from(options.keys()).filter(key => key <= todayKey).sort().pop() || Array.from(options.keys()).sort()[0] || '';
+  // Show the latest valid date plus upcoming scheduled dates through the end
+  // of next year. Older historical sheet dates are intentionally hidden.
+  const displayKeys = Array.from(options.keys()).filter(key => key === latestKey || key > todayKey).sort();
+  select.innerHTML = '<option value="">-- Select a date --</option>' + displayKeys.map(key => {
+    const date = options.get(key);
+    const label = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+    return `<option value="${key}">${label}</option>`;
+  }).join('');
+  // Start on the latest valid scheduled date.
+  attendanceState.date = latestKey;
+  select.value = latestKey;
+  if (help) {
+    const schedule = isKnownSchedule ? ({ '1,3': 'MW (Monday and Wednesday)', '2,4': 'TTH (Tuesday and Thursday)', '5,6': 'FS (Friday and Saturday)' }[allowedDays.join(',')] || '') : '';
+    help.textContent = schedule ? `Showing ${schedule} dates only.` : 'No MW, TTH, or FS schedule was found, so all dates are available.';
+  }
+}
+
+function initAttendancePage() {
+  populateAttendanceClassSelect();
+  attendanceState.showPhotos = localStorage.getItem('gv_attendance_show_photos') === '1';
+  const period = document.getElementById('attendance-period-select');
+  if (period && attendanceState.period) period.value = attendanceState.period;
+  const photos = document.getElementById('attendance-show-photos');
+  if (photos) photos.checked = Boolean(attendanceState.showPhotos);
+  if (attendanceState.classId) loadAttendanceRoster();
+}
+
+async function loadAttendanceRoster() {
+  const classSelect = document.getElementById('attendance-class-select');
+  const periodSelect = document.getElementById('attendance-period-select');
+  const classId = classSelect?.value || '';
+  const period = periodSelect?.value || 'Prelim';
+  attendanceState.classId = classId;
+  attendanceState.period = period;
+  attendanceState.records = {};
+  attendanceState.students = [];
+  renderAttendanceStudents();
+  if (!classId) return;
+
+  const requestId = ++attendanceState.requestId;
+  const workspace = document.getElementById('attendance-workspace');
+  const grid = document.getElementById('attendance-student-grid');
+  if (grid) grid.innerHTML = '<div class="attendance-loading">Loading students from the Attendance sheet...</div>';
+  const wb = await fetchWorkbookForClass(classId);
+  if (requestId !== attendanceState.requestId) return;
+  const rows = getSheetRows(wb, 'Attendance');
+  const settingsRows = getSheetRows(wb, wb?.SheetNames?.[0] || 'Settings');
+  const layout = findAttendanceLayout(rows, period);
+  populateAttendanceDateOptions(layout, settingsRows.length ? settingsRows : rows);
+  const names = layout?.students?.map(item => item.name) || await fetchStudentsForClass(classId);
+  const overrides = attendanceReadLocal(`gv_attendance_names_${classId}`, {});
+  const photos = attendanceReadLocal(`gv_attendance_photos_${classId}`, {});
+  attendanceState.students = names.map(name => ({ originalName: name, displayName: overrides[normalizeStudentName(name)] || name, removed: false }));
+  attendanceState.photos = photos;
+  if (workspace) workspace.classList.toggle('hidden', !attendanceState.students.length);
+  const title = document.getElementById('attendance-class-title');
+  const cls = classList.find(item => item.id === classId);
+  if (title) title.textContent = `${cls?.name || 'Class'} — ${period}`;
+  loadAttendanceNote();
+  await loadAttendanceDateValues(layout);
+  renderAttendanceStudents();
+}
+
+async function loadAttendanceDateValues(layout = null) {
+  const date = attendanceState.date || document.getElementById('attendance-date-select')?.value || '';
+  attendanceState.date = date;
+  if (!date || !attendanceState.classId) { renderAttendanceStudents(); return; }
+  const local = attendanceReadLocal(attendanceKey(attendanceState.classId, attendanceState.period, date), {});
+  attendanceState.records = { ...(local.records || {}) };
+  if (!layout) {
+    const wb = await fetchWorkbookForClass(attendanceState.classId);
+    layout = findAttendanceLayout(getSheetRows(wb, 'Attendance'), attendanceState.period);
+  }
+  if (!layout) return;
+  const dateColumn = layout.dateColumns.find(item => item.date === date)?.col;
+  if (dateColumn == null) return;
+  layout.students.forEach(student => {
+    const row = getSheetRows(workbookCache.get(extractSheetId(classList.find(item => item.id === attendanceState.classId)?.url)), 'Attendance')[student.row];
+    const value = String(row?.[dateColumn] ?? '').trim().toLowerCase();
+    if (value === '1' || value === 'p' || value === 'present') attendanceState.records[normalizeStudentName(student.name)] = true;
+  });
+}
+
+function setAttendanceDate(date) {
+  attendanceState.date = date || '';
+  loadAttendanceDateValues().then(renderAttendanceStudents);
+}
+
+function renderAttendanceStudents() {
+  const grid = document.getElementById('attendance-student-grid');
+  if (!grid) return;
+  if (!attendanceState.classId) { grid.innerHTML = '<div class="attendance-empty">Select a class to load students.</div>'; return; }
+  if (!attendanceState.students.length) { grid.innerHTML = '<div class="attendance-empty">No students were found in the Attendance sheet.</div>'; return; }
+  const disabled = !attendanceState.date;
+  const visible = attendanceState.students.filter(student => !student.removed);
+  grid.innerHTML = visible.map((student) => {
+    const index = attendanceState.students.indexOf(student);
+    const present = Boolean(attendanceState.records[normalizeStudentName(student.originalName)]);
+    const photo = attendanceState.photos[normalizeStudentName(student.originalName)];
+    return `<button class="attendance-student-card ${present ? 'present' : ''}" ${disabled ? 'disabled' : ''} onclick="toggleAttendanceStudent(${index})" ${disabled ? 'disabled' : ''}>
+      ${attendanceState.showPhotos && photo ? `<img class="attendance-student-photo" src="${photo}" alt="" />` : '<div class="attendance-student-avatar">👤</div>'}
+      <span class="attendance-student-name">${escapeHTML(student.displayName)}</span><span class="attendance-status">${present ? 'Present' : 'Tap to mark present'}</span>
+    </button>`;
+  }).join('');
+  const presentCount = visible.filter(student => attendanceState.records[normalizeStudentName(student.originalName)]).length;
+  const summary = document.getElementById('attendance-summary');
+  if (summary) summary.textContent = `${presentCount} present · ${visible.length - presentCount} unmarked${disabled ? ' · choose a date to enable' : ''}`;
+  const notes = document.getElementById('attendance-section-notes');
+  if (notes && document.activeElement !== notes) loadAttendanceNote();
+}
+
+function toggleAttendanceStudent(index) {
+  if (!attendanceState.date || !attendanceState.students[index]) return;
+  const key = normalizeStudentName(attendanceState.students[index].originalName);
+  attendanceState.records[key] = !attendanceState.records[key];
+  renderAttendanceStudents();
+}
+
+function toggleAttendancePhotos(checked) {
+  attendanceState.showPhotos = Boolean(checked);
+  localStorage.setItem('gv_attendance_show_photos', attendanceState.showPhotos ? '1' : '0');
+  renderAttendanceStudents();
+}
+
+function loadAttendanceNote() {
+  const notes = document.getElementById('attendance-section-notes');
+  if (!notes || !attendanceState.classId) return;
+  const all = attendanceReadLocal('gv_attendance_notes', {});
+  const value = all[attendanceState.classId] || '';
+  if (document.activeElement !== notes) notes.value = value;
+  notes.oninput = () => {
+    clearTimeout(attendanceNotesTimer);
+    attendanceNotesTimer = setTimeout(() => {
+      const current = attendanceReadLocal('gv_attendance_notes', {});
+      current[attendanceState.classId] = notes.value;
+      localStorage.setItem('gv_attendance_notes', JSON.stringify(current));
+    }, 350);
+  };
+}
+
+async function saveAttendance() {
+  if (!attendanceState.classId || !attendanceState.date) { showToast('Select a class and date before saving attendance.'); return; }
+  const cls = classList.find(item => item.id === attendanceState.classId);
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  if (!scriptUrl || !sheetId) { showToast('Attendance saved locally only. Configure the Apps Script URL and class Google Sheet first.'); return; }
+  const activeStudents = attendanceState.students.filter(student => !student.removed);
+  const statuses = {};
+  activeStudents.forEach(student => { statuses[normalizeStudentName(student.originalName)] = Boolean(attendanceState.records[normalizeStudentName(student.originalName)]); });
+  const localKey = attendanceKey(attendanceState.classId, attendanceState.period, attendanceState.date);
+  localStorage.setItem(localKey, JSON.stringify({ records: statuses, savedAt: new Date().toISOString() }));
+  showToast('Saving attendance to the Attendance sheet...');
+  try {
+    const response = await fetch(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({
+      action: 'saveAttendance', sheetId, tabName: 'Attendance', sheetName: 'Attendance', period: attendanceState.period,
+      date: attendanceState.date, studentNames: activeStudents.map(student => student.originalName), attendance: statuses
+    }) });
+    const result = JSON.parse(await response.text());
+    const writes = Number(result.writeCount || result.updatedCells || 0);
+    if (!response.ok || !result.success || writes <= 0) throw new Error(result.error || 'No attendance cells were updated.');
+    workbookCache.delete(sheetId);
+    showToast(`✅ ${attendanceState.period} attendance for ${attendanceState.date} saved to Google Sheets.`);
+  } catch (error) { showToast(`⚠️ Attendance saved locally, but Sheets sync failed: ${error.message}`); }
+}
+
+function openAttendanceStudentEditor() {
+  if (!attendanceState.students.length) { showToast('Load a class first.'); return; }
+  const modal = document.getElementById('attendance-student-modal');
+  const select = document.getElementById('attendance-edit-student-select');
+  select.innerHTML = attendanceState.students.map((student, index) => `<option value="${index}">${escapeHTML(student.displayName)}</option>`).join('');
+  attendanceState.editIndex = Math.max(0, attendanceState.editIndex);
+  select.value = String(attendanceState.editIndex);
+  selectAttendanceStudentForEdit(select.value);
+  modal.classList.remove('hidden');
+}
+
+function closeAttendanceStudentEditor() { document.getElementById('attendance-student-modal')?.classList.add('hidden'); }
+
+function selectAttendanceStudentForEdit(value) {
+  attendanceState.editIndex = Number(value);
+  const student = attendanceState.students[attendanceState.editIndex];
+  if (!student) return;
+  document.getElementById('attendance-edit-name').value = student.displayName;
+  document.getElementById('attendance-edit-context').textContent = student.originalName;
+  const photo = attendanceState.photos[normalizeStudentName(student.originalName)];
+  const image = document.getElementById('attendance-photo-preview');
+  const empty = document.getElementById('attendance-photo-empty');
+  image.src = photo || '';
+  image.classList.toggle('hidden', !photo); empty.classList.toggle('hidden', Boolean(photo));
+}
+
+function handleAttendancePhoto(event) {
+  const file = event.target.files?.[0];
+  if (!file || !attendanceState.students[attendanceState.editIndex]) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      const maxSide = 600;
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      attendanceState.photos[normalizeStudentName(attendanceState.students[attendanceState.editIndex].originalName)] = canvas.toDataURL('image/jpeg', 0.78);
+      selectAttendanceStudentForEdit(attendanceState.editIndex);
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function saveAttendanceStudent() {
+  const student = attendanceState.students[attendanceState.editIndex];
+  if (!student) return;
+  const name = document.getElementById('attendance-edit-name').value.trim();
+  if (!name) { showToast('Enter a student name.'); return; }
+  student.displayName = name;
+  const overrides = attendanceReadLocal(`gv_attendance_names_${attendanceState.classId}`, {});
+  overrides[normalizeStudentName(student.originalName)] = name;
+  localStorage.setItem(`gv_attendance_names_${attendanceState.classId}`, JSON.stringify(overrides));
+  localStorage.setItem(`gv_attendance_photos_${attendanceState.classId}`, JSON.stringify(attendanceState.photos));
+  closeAttendanceStudentEditor(); renderAttendanceStudents(); showToast('Student details saved for this class.');
+}
+
+function removeAttendanceStudent() {
+  const student = attendanceState.students[attendanceState.editIndex];
+  if (!student) return;
+  student.removed = true; closeAttendanceStudentEditor(); renderAttendanceStudents(); showToast('Student removed from this attendance view.');
+}
+
 document.getElementById('nav-picker').addEventListener('click', () => {
   const select = document.getElementById('picker-class-select');
   select.innerHTML = '<option value="">-- Select a Class --</option>' + 

@@ -78,7 +78,6 @@
 
         <button class="nav-item" id="nav-attendance" onclick="showPage('attendance')">
           <span class="nav-icon">📅</span> Attendance
-          <span class="nav-badge soon">Soon</span>
         </button>
 
         <div class="nav-section-label">System</div>
@@ -163,7 +162,10 @@
         <div class="panel">
           <div class="panel-header">
             <div class="panel-title">📋 Saved Classes</div>
-            <div id="class-count" style="font-size:0.8rem; color:var(--muted);"></div>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+              <div id="class-count" style="font-size:0.8rem; color:var(--muted);"></div>
+              <button class="btn btn-ghost btn-sm" id="reorder-classes-btn" onclick="toggleReorderMode()">↕ Reorder Classes</button>
+            </div>
           </div>
           <div id="class-table-wrap">
             <!-- rendered by JS -->
@@ -651,11 +653,46 @@
         </div>
       </div>
       <div class="admin-page" id="page-attendance">
-        <div class="page-header"><div class="page-title">📅 Attendance</div></div>
-        <div style="text-align:center; padding: 4rem 2rem; color: var(--muted);">
-          <div style="font-size:3rem; margin-bottom:1rem;">🚧</div>
-          <div style="font-size:1.1rem; font-weight:600; margin-bottom:0.5rem;">Coming Soon</div>
-          <div style="font-size:0.875rem;">Attendance recording will be available in a future update.</div>
+        <div class="page-header attendance-page-header">
+          <div>
+            <div class="page-title">📅 Attendance</div>
+            <div class="page-sub">Choose a class, grading period, and date, then tap students who are present.</div>
+          </div>
+          <button class="btn btn-ghost" onclick="toggleFullscreen('page-attendance')" title="Toggle Fullscreen">Fullscreen</button>
+        </div>
+
+        <div class="panel attendance-setup-panel">
+          <div class="panel-header"><div class="panel-title">Attendance Details</div></div>
+          <div class="panel-body attendance-setup-grid">
+            <div class="form-group"><label class="form-label" for="attendance-class-select">Class</label><select id="attendance-class-select" class="form-input" onchange="loadAttendanceRoster()"><option value="">-- Select a Class --</option></select></div>
+            <div class="form-group"><label class="form-label" for="attendance-period-select">Grading Period</label><select id="attendance-period-select" class="form-input" onchange="loadAttendanceRoster()"><option value="Prelim">Prelim</option><option value="Midterm">Midterm</option><option value="Semifinal">Semifinal</option><option value="Final">Final</option></select></div>
+            <div class="form-group"><label class="form-label" for="attendance-date-select">Attendance Date</label><select id="attendance-date-select" class="form-input" onchange="setAttendanceDate(this.value)"><option value="">-- Select a date --</option></select></div>
+            <div class="attendance-date-help" id="attendance-date-help">Only the dates matching this class schedule are shown.</div>
+          </div>
+        </div>
+
+        <div id="attendance-workspace" class="hidden">
+          <div class="panel attendance-panel">
+            <div class="panel-header attendance-panel-header">
+              <div><div class="panel-title" id="attendance-class-title">Attendance</div><div class="attendance-summary" id="attendance-summary">0 present</div></div>
+            </div>
+            <div class="panel-body"><div class="attendance-instruction">Tap a student card to mark or unmark <strong>Present</strong>. Students are unmarked by default; absence alerts are not enabled yet.</div><div id="attendance-student-grid" class="attendance-student-grid"></div><div class="attendance-actions-below"><button class="btn btn-ghost" onclick="openAttendanceStudentEditor()">Edit Students</button><label class="attendance-photo-toggle"><input type="checkbox" id="attendance-show-photos" onchange="toggleAttendancePhotos(this.checked)" /> Show photos</label><button class="btn btn-primary" onclick="saveAttendance()">Save Attendance</button></div></div>
+          </div>
+          <div class="panel attendance-notes-panel"><div class="panel-header"><div class="panel-title">Section Notes</div><span class="attendance-autosave-label">Auto-saved for this class</span></div><div class="panel-body"><textarea id="attendance-section-notes" class="form-input attendance-notes" placeholder="Write notes for this section..."></textarea></div></div>
+        </div>
+
+        <div id="attendance-student-modal" class="attendance-modal hidden">
+          <div class="attendance-modal-dialog">
+            <div class="attendance-modal-header"><div><div class="panel-title">Manage Student</div><div class="attendance-edit-context" id="attendance-edit-context"></div></div><button class="btn btn-ghost btn-sm" onclick="closeAttendanceStudentEditor()">Close</button></div>
+            <div class="attendance-modal-body">
+              <div class="form-group"><label class="form-label" for="attendance-edit-student-select">Student</label><select id="attendance-edit-student-select" class="form-input" onchange="selectAttendanceStudentForEdit(this.value)"></select></div>
+              <div class="attendance-photo-preview-wrap"><img id="attendance-photo-preview" class="attendance-photo-preview hidden" alt="Student photo" /><div id="attendance-photo-empty" class="attendance-photo-empty">No photo saved</div></div>
+              <div class="attendance-photo-actions"><button class="btn btn-success" onclick="document.getElementById('attendance-camera-input').click()">Take Photo</button><button class="btn btn-secondary" onclick="document.getElementById('attendance-upload-input').click()">Upload Photo</button></div>
+              <input id="attendance-camera-input" type="file" accept="image/*" capture="user" class="hidden" onchange="handleAttendancePhoto(event)" /><input id="attendance-upload-input" type="file" accept="image/*" class="hidden" onchange="handleAttendancePhoto(event)" />
+              <div class="form-group"><label class="form-label" for="attendance-edit-name">Student Name</label><input id="attendance-edit-name" class="form-input" type="text" /></div>
+              <div class="attendance-modal-actions"><button class="btn btn-primary" onclick="saveAttendanceStudent()">Save Student</button><button class="btn btn-danger" onclick="removeAttendanceStudent()">Remove from Attendance</button></div>
+            </div>
+          </div>
         </div>
       </div>
 
