@@ -819,6 +819,11 @@ function drop(ev, toGroupIdx) {
 async function saveGroups() {
   if (currentGroups.length === 0) return;
   const classId = document.getElementById('group-class-select').value;
+  const assignedStudentCount = currentGroups.reduce((total, group) => total + group.students.length, 0);
+  if (assignedStudentCount === 0) {
+    showToast('No students are assigned to a group yet.');
+    return;
+  }
   
   // Save locally first for offline
   try {
@@ -829,7 +834,7 @@ async function saveGroups() {
   } catch(e) {}
   
   // Try online sync
-  if (_db) {
+  if (false && _db) {
     try {
       const ref = window._firestoreDoc(_db, FIRESTORE_COL, 'groups');
       let existing = {};
@@ -853,7 +858,14 @@ async function syncGroupsToSheets(classId) {
   const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
   const cls = classList.find(item => item.id === classId);
   const sheetId = cls ? extractSheetId(cls.url) : '';
-  if (!scriptUrl || !sheetId) return;
+  if (!scriptUrl) {
+    showToast('Groups saved locally only. Add the Apps Script Web App URL in Settings.');
+    return;
+  }
+  if (!sheetId) {
+    showToast('Groups saved locally only. This class has no valid Google Sheets link.');
+    return;
+  }
 
   showToast('Saving groups to the Groups sheet...');
   try {
