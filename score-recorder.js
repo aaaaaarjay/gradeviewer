@@ -432,6 +432,18 @@ function saveGSheetsScriptUrl() {
     '<span style="color:var(--green);">✅ Saved. Auto-sync is active.</span>';
 }
 
+function initGSheetsSettings() {
+  const input = document.getElementById('gsheets-script-url-input');
+  const status = document.getElementById('gsheets-settings-status');
+  const savedUrl = localStorage.getItem(SCRIPT_URL_KEY) || '';
+  if (input) input.value = savedUrl;
+  if (status) {
+    status.innerHTML = savedUrl
+      ? '<span style="color:var(--green);">✅ Saved. Auto-sync is active.</span>'
+      : '';
+  }
+}
+
 function updateGSheetsUI() {
   const scriptUrl = localStorage.getItem(SCRIPT_URL_KEY);
   const pill       = document.getElementById('gsheets-status-pill');
