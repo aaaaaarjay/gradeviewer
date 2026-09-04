@@ -771,9 +771,21 @@
             <div class="attendance-modal-header"><div><div class="panel-title">Manage Student</div><div class="attendance-edit-context" id="attendance-edit-context"></div></div><button class="btn btn-ghost btn-sm" onclick="closeAttendanceStudentEditor()">Close</button></div>
             <div class="attendance-modal-body">
               <div class="form-group"><label class="form-label" for="attendance-edit-student-select">Student</label><select id="attendance-edit-student-select" class="form-input" onchange="selectAttendanceStudentForEdit(this.value)"></select></div>
-              <div class="attendance-photo-preview-wrap"><img id="attendance-photo-preview" class="attendance-photo-preview hidden" alt="Student photo" /><div id="attendance-photo-empty" class="attendance-photo-empty">No photo saved</div></div>
-              <div class="attendance-photo-actions"><button class="btn btn-success" onclick="document.getElementById('attendance-camera-input').click()">Take Photo</button><button class="btn btn-secondary" onclick="document.getElementById('attendance-upload-input').click()">Upload Photo</button></div>
-              <input id="attendance-camera-input" type="file" accept="image/*" capture="user" class="hidden" onchange="handleAttendancePhoto(event)" /><input id="attendance-upload-input" type="file" accept="image/*" class="hidden" onchange="handleAttendancePhoto(event)" />
+              <div class="attendance-photo-preview-wrap">
+                <img id="attendance-photo-preview" class="attendance-photo-preview hidden" alt="Student photo" />
+                <video id="attendance-camera-preview" class="attendance-photo-preview hidden" autoplay playsinline style="transform: scaleX(-1);"></video>
+                <canvas id="attendance-camera-canvas" class="hidden"></canvas>
+                <div id="attendance-photo-empty" class="attendance-photo-empty">No photo saved</div>
+              </div>
+              <div class="attendance-photo-actions" id="attendance-photo-actions-default">
+                <button class="btn btn-success" onclick="startAttendanceCamera()">Take Photo</button>
+                <button class="btn btn-secondary" onclick="document.getElementById('attendance-upload-input').click()">Upload Photo</button>
+              </div>
+              <div class="attendance-photo-actions hidden" id="attendance-photo-actions-camera">
+                <button class="btn btn-primary" onclick="captureAttendancePhoto()">📸 Capture</button>
+                <button class="btn btn-danger" onclick="stopAttendanceCamera()">Cancel</button>
+              </div>
+              <input id="attendance-upload-input" type="file" accept="image/*" class="hidden" onchange="handleAttendancePhoto(event)" />
               <div class="form-group"><label class="form-label" for="attendance-edit-name">Student Name</label><input id="attendance-edit-name" class="form-input" type="text" /></div>
               <div class="attendance-modal-actions"><button class="btn btn-primary" onclick="saveAttendanceStudent()">Save Student</button><button class="btn btn-danger" onclick="removeAttendanceStudent()">Remove from Attendance</button></div>
             </div>

@@ -1890,7 +1890,10 @@ function openAttendanceStudentEditor() {
   modal.classList.remove('hidden');
 }
 
-function closeAttendanceStudentEditor() { document.getElementById('attendance-student-modal')?.classList.add('hidden'); }
+function closeAttendanceStudentEditor() { 
+  stopAttendanceCamera();
+  document.getElementById('attendance-student-modal')?.classList.add('hidden'); 
+}
 
 function selectAttendanceStudentForEdit(value) {
   attendanceState.editIndex = Number(value);
@@ -1925,6 +1928,62 @@ function handleAttendancePhoto(event) {
   };
   reader.readAsDataURL(file);
   event.target.value = '';
+}
+
+let attendanceMediaStream = null;
+
+async function startAttendanceCamera() {
+  try {
+    attendanceMediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    const video = document.getElementById('attendance-camera-preview');
+    video.srcObject = attendanceMediaStream;
+    
+    document.getElementById('attendance-photo-preview').classList.add('hidden');
+    document.getElementById('attendance-photo-empty').classList.add('hidden');
+    video.classList.remove('hidden');
+    
+    document.getElementById('attendance-photo-actions-default').classList.add('hidden');
+    document.getElementById('attendance-photo-actions-camera').classList.remove('hidden');
+  } catch (err) {
+    console.error("Camera access denied or unavailable:", err);
+    showToast("⚠️ Cannot access camera. Please allow permissions or upload a photo instead.");
+  }
+}
+
+function stopAttendanceCamera() {
+  if (attendanceMediaStream) {
+    attendanceMediaStream.getTracks().forEach(track => track.stop());
+    attendanceMediaStream = null;
+  }
+  document.getElementById('attendance-camera-preview')?.classList.add('hidden');
+  document.getElementById('attendance-photo-actions-camera')?.classList.add('hidden');
+  document.getElementById('attendance-photo-actions-default')?.classList.remove('hidden');
+  
+  const selectVal = document.getElementById('attendance-edit-student-select')?.value;
+  if (selectVal !== undefined && selectVal !== '') {
+    selectAttendanceStudentForEdit(selectVal);
+  }
+}
+
+function captureAttendancePhoto() {
+  const video = document.getElementById('attendance-camera-preview');
+  if (!video.videoWidth) return;
+  
+  const canvas = document.getElementById('attendance-camera-canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  const ctx = canvas.getContext('2d');
+  // Mirror the image since it's a front-facing camera
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  const student = attendanceState.students[attendanceState.editIndex];
+  if (student) {
+    attendanceState.photos[normalizeStudentName(student.originalName)] = canvas.toDataURL('image/jpeg', 0.85);
+  }
+  stopAttendanceCamera();
 }
 
 function saveAttendanceStudent() {
