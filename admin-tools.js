@@ -2,6 +2,8 @@
    GRADE VIEWER — ADMIN TOOLS (Groups & Picker)
    ═══════════════════════════════════════════════ */
 
+const workbookCache = new Map();
+
 let currentStudents = [];
 let currentGroups = [];
 let pickerPool = [];
