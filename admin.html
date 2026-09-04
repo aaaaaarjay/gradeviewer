@@ -702,36 +702,86 @@
         <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
           <div>
             <div class="page-title">👥 Students Directory</div>
-            <div class="page-sub">View and search through your student rosters.</div>
+            <div class="page-sub">Global search and leaderboard across all your classes. Ranked by highest grade.</div>
           </div>
+          <button class="btn btn-ghost" onclick="loadAllStudentsGlobal()" title="Refresh All Data">🔄 Refresh</button>
         </div>
 
-        <div class="panel">
-          <div class="panel-header" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-            <div style="flex:1; min-width:200px;">
-              <select id="students-class-select" class="form-input" onchange="loadStudentsDirectory()">
-                <option value="">-- Select a Class --</option>
-              </select>
+        <div class="students-layout">
+          <!-- Main Table Area -->
+          <div class="panel students-main-panel">
+            <div class="panel-header" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+              <div style="flex:1; min-width:180px;">
+                <select id="students-class-select" class="form-input" onchange="filterStudentsDirectory()">
+                  <option value="">All Classes</option>
+                </select>
+              </div>
+              <div style="flex:2; min-width:250px; position:relative;">
+                <span style="position:absolute; left:1rem; top:50%; transform:translateY(-50%);">🔍</span>
+                <input type="text" id="students-search-input" class="form-input" style="padding-left:2.5rem;" placeholder="Search any student across all classes..." oninput="filterStudentsDirectory()" />
+              </div>
             </div>
-            <div style="flex:2; min-width:250px; position:relative;">
-              <span style="position:absolute; left:1rem; top:50%; transform:translateY(-50%);">🔍</span>
-              <input type="text" id="students-search-input" class="form-input" style="padding-left:2.5rem;" placeholder="Search for a student..." oninput="filterStudentsDirectory()" />
+            
+            <div id="students-loading-bar" class="hidden" style="padding: 1rem; text-align: center; color: var(--muted); background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 0.9rem;">
+              <div style="margin-bottom: 0.5rem;" id="students-loading-text">Loading student data from Google Sheets...</div>
+              <div style="width: 100%; height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden;">
+                <div id="students-loading-progress" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+
+            <div style="overflow-x:auto;">
+              <table class="class-table students-directory-table">
+                <thead>
+                  <tr>
+                    <th style="width:60px; text-align:center;">Rank</th>
+                    <th style="width:60px;">Photo</th>
+                    <th>Student Name</th>
+                    <th>Class</th>
+                    <th style="width:100px; text-align:center;">Final Grade</th>
+                  </tr>
+                </thead>
+                <tbody id="students-directory-tbody">
+                  <tr><td colspan="5" style="text-align:center; color:var(--muted); padding:2rem;">Data not loaded yet.</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
-          <div style="overflow-x:auto;">
-            <table class="class-table">
-              <thead>
-                <tr>
-                  <th style="width:50px;">#</th>
-                  <th>Student Name</th>
-                  <th>Class</th>
-                  <th>Groups</th>
-                </tr>
-              </thead>
-              <tbody id="students-directory-tbody">
-                <tr><td colspan="4" style="text-align:center; color:var(--muted); padding:2rem;">Select a class to view students.</td></tr>
-              </tbody>
-            </table>
+
+          <!-- Slide-out Side Panel -->
+          <div class="panel students-side-panel hidden" id="students-side-panel">
+            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+              <div class="panel-title">Student Profile</div>
+              <button class="btn btn-ghost btn-sm" onclick="closeStudentSidePanel()">✕</button>
+            </div>
+            <div class="panel-body" style="text-align: center;">
+              
+              <!-- Photo area (uses same structure as attendance modal for compatibility) -->
+              <div class="attendance-photo-preview-wrap" style="margin: 0 auto 1.5rem auto;">
+                <img id="students-photo-preview" class="attendance-photo-preview hidden" alt="Student photo" />
+                <video id="students-camera-preview" class="attendance-photo-preview hidden" autoplay playsinline style="transform: scaleX(-1);"></video>
+                <canvas id="students-camera-canvas" class="hidden"></canvas>
+                <div id="students-photo-empty" class="attendance-photo-empty">No photo saved</div>
+              </div>
+              
+              <div class="attendance-photo-actions" id="students-photo-actions-default" style="justify-content: center; margin-bottom: 1.5rem;">
+                <button class="btn btn-success btn-sm" onclick="startStudentsCamera()">Take Photo</button>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('students-upload-input').click()">Upload</button>
+              </div>
+              <div class="attendance-photo-actions hidden" id="students-photo-actions-camera" style="justify-content: center; margin-bottom: 1.5rem;">
+                <button class="btn btn-primary btn-sm" onclick="captureStudentsPhoto()">📸 Capture</button>
+                <button class="btn btn-danger btn-sm" onclick="stopStudentsCamera()">Cancel</button>
+              </div>
+              <input id="students-upload-input" type="file" accept="image/*" class="hidden" onchange="handleStudentsPhoto(event)" />
+              
+              <h3 id="students-detail-name" style="margin: 0 0 0.5rem 0; font-size: 1.25rem;"></h3>
+              <p id="students-detail-class" style="color: var(--muted); margin: 0 0 1rem 0; font-size: 0.9rem;"></p>
+              
+              <div style="background: var(--surface2); padding: 1rem; border-radius: var(--radius); display: inline-block;">
+                <div style="font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;">Final Grade</div>
+                <div id="students-detail-grade" style="font-size: 1.75rem; font-weight: 800;"></div>
+              </div>
+              
+            </div>
           </div>
         </div>
       </div>

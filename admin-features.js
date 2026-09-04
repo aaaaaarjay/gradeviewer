@@ -5,77 +5,293 @@
 
 window.addEventListener('load', function () {
 
-/* ─── STUDENTS DIRECTORY ─── */
+/* ─── STUDENTS DIRECTORY (GLOBAL SEARCH & LEADERBOARD) ─── */
 
 let studentsDirectoryData = [];
+let studentsDirectoryLoaded = false;
+let currentStudentProfile = null;
 
 document.getElementById('nav-students').addEventListener('click', () => {
   const sel = document.getElementById('students-class-select');
-  sel.innerHTML = '<option value="">-- Select a Class --</option>' +
+  sel.innerHTML = '<option value="">All Classes</option>' +
     classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+    
+  if (!studentsDirectoryLoaded) {
+    loadAllStudentsGlobal();
+  }
 });
 
-async function loadStudentsDirectory() {
-  const classId = document.getElementById('students-class-select').value;
+async function loadAllStudentsGlobal() {
+  if (!classList || classList.length === 0) return;
+  
   const tbody = document.getElementById('students-directory-tbody');
-
-  if (!classId) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:2rem;">Select a class to view students.</td></tr>';
-    studentsDirectoryData = [];
-    return;
-  }
-
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:2rem;">Loading students...</td></tr>';
-
-  const students = await fetchStudentsForClass(classId);
-  const cls = classList.find(c => c.id === classId);
-
-  const allGroups = JSON.parse(localStorage.getItem('gv_groups') || '{}');
-  const classGroups = allGroups[classId] || [];
-
-  studentsDirectoryData = students.map(student => {
-    let groupName = '—';
-    for (let i = 0; i < classGroups.length; i++) {
-      if (classGroups[i].members.includes(student)) {
-        groupName = `Group ${i + 1}`;
-        break;
+  const loadingBar = document.getElementById('students-loading-bar');
+  const progress = document.getElementById('students-loading-progress');
+  const text = document.getElementById('students-loading-text');
+  
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:2rem;">Fetching data...</td></tr>';
+  loadingBar.classList.remove('hidden');
+  
+  studentsDirectoryData = [];
+  
+  for (let i = 0; i < classList.length; i++) {
+    const cls = classList[i];
+    progress.style.width = `${Math.round(((i) / classList.length) * 100)}%`;
+    text.textContent = `Loading data from ${cls.name}... (${i + 1}/${classList.length})`;
+    
+    try {
+      const wb = await fetchWorkbookForClass(cls.id);
+      if (!wb) continue;
+      
+      // Try to find Summary sheet, fallback to whatever seems to have grades
+      const summarySheetName = (wb.SheetNames || []).find(n => n.toLowerCase().includes('summary')) || wb.SheetNames[0];
+      const rows = getSheetRows(wb, summarySheetName) || [];
+      
+      // Basic heuristic to parse FG and Name similar to app.js
+      let headerRow = -1;
+      for (let r = 0; r < Math.min(rows.length, 15); r++) {
+        const cells = rows[r].map(c => String(c).toLowerCase());
+        if (cells.some(c => c.includes('name') || c.includes('student'))) { headerRow = r; break; }
       }
+      
+      if (headerRow >= 0) {
+        const header = rows[headerRow].map(c => String(c).toLowerCase().trim());
+        const colName = header.findIndex(h => h.includes('name'));
+        const colFG = header.findIndex(h => h === 'fg' || h.includes('final grade') || h === 'fg ');
+        
+        for (let r = headerRow + 1; r < rows.length; r++) {
+          const row = rows[r];
+          const nameVal = String(row[colName] || '').trim();
+          if (!nameVal || nameVal.toLowerCase() === 'student\'s name' || nameVal.length < 5) continue;
+          
+          let fgVal = colFG >= 0 ? parseFloat(row[colFG]) : null;
+          if (isNaN(fgVal)) fgVal = null;
+          
+          studentsDirectoryData.push({
+            name: nameVal,
+            normName: normalizeStudentName(nameVal),
+            classId: cls.id,
+            className: cls.name,
+            fg: fgVal
+          });
+        }
+      } else {
+        // Fallback: just grab names using roster scanner
+        const names = collectNamesFromWorkbook(wb);
+        names.forEach(nameVal => {
+          studentsDirectoryData.push({
+            name: nameVal,
+            normName: normalizeStudentName(nameVal),
+            classId: cls.id,
+            className: cls.name,
+            fg: null
+          });
+        });
+      }
+      
+    } catch (err) {
+      console.warn("Failed to load class for directory:", cls.name, err);
     }
-    return { name: student, className: cls?.name || 'Unknown', groupName };
+  }
+  
+  progress.style.width = '100%';
+  text.textContent = 'Processing and sorting...';
+  
+  // Sort by highest grade (1.00 is best in PH grading, so ascending order)
+  studentsDirectoryData.sort((a, b) => {
+    // Put nulls at the bottom
+    if (a.fg === null && b.fg === null) return a.name.localeCompare(b.name);
+    if (a.fg === null) return 1;
+    if (b.fg === null) return -1;
+    return a.fg - b.fg;
   });
-
-  renderStudentsDirectory();
+  
+  // Remove exact duplicates (same name, same class)
+  const unique = [];
+  const seen = new Set();
+  studentsDirectoryData.forEach(s => {
+    const key = `${s.normName}_${s.classId}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(s);
+    }
+  });
+  studentsDirectoryData = unique;
+  
+  setTimeout(() => {
+    loadingBar.classList.add('hidden');
+    studentsDirectoryLoaded = true;
+    filterStudentsDirectory();
+  }, 500);
 }
 
-function renderStudentsDirectory() {
+function filterStudentsDirectory() {
   const tbody = document.getElementById('students-directory-tbody');
+  const classFilter = document.getElementById('students-class-select').value;
   const query = document.getElementById('students-search-input').value.toLowerCase().trim();
 
   let filtered = studentsDirectoryData;
+  if (classFilter) {
+    filtered = filtered.filter(s => s.classId === classFilter);
+  }
   if (query) {
     filtered = filtered.filter(s => s.name.toLowerCase().includes(query));
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted); padding:2rem;">No students found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:2rem;">No students found matching filters.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = filtered.map((s, idx) => `
-    <tr>
-      <td style="color:var(--muted); font-size:0.8rem;">${idx + 1}</td>
-      <td style="font-weight:600; font-size:0.9rem;">${escapeHTML(s.name)}</td>
-      <td style="font-size:0.85rem;">${escapeHTML(s.className)}</td>
-      <td><span class="key-badge ${s.groupName !== '—' ? 'unlocked' : ''}" style="font-size:0.75rem;">${escapeHTML(s.groupName)}</span></td>
+  tbody.innerHTML = filtered.map((s, idx) => {
+    const photo = getGlobalPhoto(s.normName);
+    const avatar = photo 
+      ? `<img src="${photo}" style="width:36px; height:36px; border-radius:50%; object-fit:cover; border:2px solid var(--surface);" />`
+      : `<div style="width:36px; height:36px; border-radius:50%; background:var(--primary); color:white; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:0.8rem;">${getInitialsFrom(s.name)}</div>`;
+      
+    let fgDisplay = s.fg !== null ? s.fg.toFixed(2) : '—';
+    let fgColor = 'var(--muted)';
+    if (s.fg !== null) {
+      if (s.fg <= 3.0) fgColor = 'var(--success)';
+      else fgColor = 'var(--danger)';
+    }
+
+    return `
+    <tr style="cursor:pointer; transition: background 0.2s;" onclick="openStudentSidePanel('${escapeHTML(s.normName)}', '${escapeHTML(s.name)}', '${escapeHTML(s.classId)}', '${escapeHTML(s.className)}', ${s.fg})" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <td style="color:var(--muted); font-size:0.85rem; font-weight:bold; text-align:center;">${idx + 1}</td>
+      <td style="text-align:center;">${avatar}</td>
+      <td style="font-weight:600; font-size:0.95rem;">${escapeHTML(s.name)}</td>
+      <td style="font-size:0.85rem; color:var(--muted);">${escapeHTML(s.className)}</td>
+      <td style="font-size:1rem; font-weight:bold; color:${fgColor}; text-align:center;">${fgDisplay}</td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
-window.filterStudentsDirectory = function () {
-  if (studentsDirectoryData.length > 0) renderStudentsDirectory();
-};
+function getInitialsFrom(name) {
+  const parts = name.trim().split(/[\s,]+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.trim().slice(0, 2).toUpperCase();
+}
 
-window.loadStudentsDirectory = loadStudentsDirectory;
+function openStudentSidePanel(normName, name, classId, className, fg) {
+  currentStudentProfile = { normName, name, classId, className, fg };
+  document.getElementById('students-detail-name').textContent = name;
+  document.getElementById('students-detail-class').textContent = className;
+  
+  const gradeEl = document.getElementById('students-detail-grade');
+  if (fg !== null && fg !== undefined) {
+    gradeEl.textContent = Number(fg).toFixed(2);
+    gradeEl.style.color = Number(fg) <= 3.0 ? 'var(--success)' : 'var(--danger)';
+  } else {
+    gradeEl.textContent = 'N/A';
+    gradeEl.style.color = 'var(--text)';
+  }
+  
+  refreshStudentSidePanelPhoto();
+  
+  document.getElementById('students-side-panel').classList.remove('hidden');
+}
+
+function closeStudentSidePanel() {
+  document.getElementById('students-side-panel').classList.add('hidden');
+  stopStudentsCamera();
+}
+
+function refreshStudentSidePanelPhoto() {
+  if (!currentStudentProfile) return;
+  const photo = getGlobalPhoto(currentStudentProfile.normName);
+  const preview = document.getElementById('students-photo-preview');
+  const empty = document.getElementById('students-photo-empty');
+  
+  if (photo) {
+    preview.src = photo;
+    preview.classList.remove('hidden');
+    empty.classList.add('hidden');
+  } else {
+    preview.classList.add('hidden');
+    empty.classList.remove('hidden');
+  }
+}
+
+// Side Panel Camera Logic
+let studentsMediaStream = null;
+
+async function startStudentsCamera() {
+  try {
+    studentsMediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    const video = document.getElementById('students-camera-preview');
+    video.srcObject = studentsMediaStream;
+    
+    document.getElementById('students-photo-preview').classList.add('hidden');
+    document.getElementById('students-photo-empty').classList.add('hidden');
+    video.classList.remove('hidden');
+    
+    document.getElementById('students-photo-actions-default').classList.add('hidden');
+    document.getElementById('students-photo-actions-camera').classList.remove('hidden');
+  } catch (err) {
+    alert("Camera access denied or unavailable.");
+  }
+}
+
+function stopStudentsCamera() {
+  if (studentsMediaStream) {
+    studentsMediaStream.getTracks().forEach(track => track.stop());
+    studentsMediaStream = null;
+  }
+  document.getElementById('students-camera-preview').classList.add('hidden');
+  document.getElementById('students-photo-actions-camera').classList.add('hidden');
+  document.getElementById('students-photo-actions-default').classList.remove('hidden');
+  refreshStudentSidePanelPhoto();
+}
+
+function captureStudentsPhoto() {
+  const video = document.getElementById('students-camera-preview');
+  if (!video.videoWidth || !currentStudentProfile) return;
+  
+  const canvas = document.getElementById('students-camera-canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.translate(canvas.width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  setGlobalPhoto(currentStudentProfile.normName, dataUrl);
+  
+  stopStudentsCamera();
+  filterStudentsDirectory(); // update list thumbnail
+}
+
+function handleStudentsPhoto(event) {
+  const file = event.target.files?.[0];
+  if (!file || !currentStudentProfile) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const image = new Image();
+    image.onload = () => {
+      const maxSide = 600;
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      setGlobalPhoto(currentStudentProfile.normName, dataUrl);
+      refreshStudentSidePanelPhoto();
+      filterStudentsDirectory(); // update list thumbnail
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+window.loadAllStudentsGlobal = loadAllStudentsGlobal;
+window.filterStudentsDirectory = filterStudentsDirectory;
+
 
 /* ─── ATTENDANCE TRACKER ─── */
 

@@ -1877,3 +1877,9 @@ html, body {
   .saved-group-member-score-row { align-items: flex-start; flex-direction: column; }
   .saved-group-member-score-row .form-input { width: 100%; flex-basis: auto; }
 }
+
+/* STUDENTS PAGE LAYOUT */
+.students-layout { display: flex; gap: 1rem; align-items: flex-start; }
+.students-main-panel { flex: 1; min-width: 0; }
+.students-side-panel { width: 320px; flex-shrink: 0; position: sticky; top: 1rem; }
+@media (max-width: 900px) { .students-layout { flex-direction: column; } .students-side-panel { width: 100%; position: static; } }

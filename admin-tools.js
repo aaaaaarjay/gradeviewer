@@ -106,7 +106,54 @@ function normalizeStudentName(value) {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
 }
 
-const workbookCache = new Map();
+/* ═══════════════════════════════════════════════
+   GLOBAL PHOTO STORE
+   Single key gv_student_photos shared between
+   Attendance and Students Directory pages.
+   ═══════════════════════════════════════════════ */
+const GV_PHOTOS_KEY = 'gv_student_photos';
+
+function getGlobalPhotos() {
+  try { return JSON.parse(localStorage.getItem(GV_PHOTOS_KEY) || '{}'); } catch { return {}; }
+}
+
+function getGlobalPhoto(normalizedName) {
+  return getGlobalPhotos()[normalizedName] || null;
+}
+
+function setGlobalPhoto(normalizedName, dataUrl) {
+  const photos = getGlobalPhotos();
+  if (dataUrl) photos[normalizedName] = dataUrl;
+  else delete photos[normalizedName];
+  localStorage.setItem(GV_PHOTOS_KEY, JSON.stringify(photos));
+}
+
+/** One-time migration: copy old per-class photos into the global store. */
+function migrateAttendancePhotos() {
+  if (localStorage.getItem('gv_photos_migrated')) return;
+  const globalPhotos = getGlobalPhotos();
+  let changed = false;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith('gv_attendance_photos_')) continue;
+    try {
+      const classPhotos = JSON.parse(localStorage.getItem(key) || '{}');
+      Object.entries(classPhotos).forEach(([normName, dataUrl]) => {
+        if (dataUrl && !globalPhotos[normName]) {
+          globalPhotos[normName] = dataUrl;
+          changed = true;
+        }
+      });
+    } catch { /* ignore */ }
+  }
+  if (changed) localStorage.setItem(GV_PHOTOS_KEY, JSON.stringify(globalPhotos));
+  localStorage.setItem('gv_photos_migrated', '1');
+}
+
+// Run migration once on page load
+migrateAttendancePhotos();
+
+
 let lastSpreadsheetLoadError = '';
 
 async function fetchWorkbookForClass(classId, forceRefresh = false) {
@@ -1766,9 +1813,9 @@ async function loadAttendanceRoster() {
   populateAttendanceDateOptions(layout, settingsRows.length ? settingsRows : rows);
   const names = layout?.students?.map(item => item.name) || await fetchStudentsForClass(classId);
   const overrides = attendanceReadLocal(`gv_attendance_names_${classId}`, {});
-  const photos = attendanceReadLocal(`gv_attendance_photos_${classId}`, {});
+  // Load photos from global shared store (shared with Students Directory)
   attendanceState.students = names.map(name => ({ originalName: name, displayName: overrides[normalizeStudentName(name)] || name, removed: false }));
-  attendanceState.photos = photos;
+  attendanceState.photos = getGlobalPhotos();
   if (workspace) workspace.classList.toggle('hidden', !attendanceState.students.length);
   const title = document.getElementById('attendance-class-title');
   const cls = classList.find(item => item.id === classId);
@@ -1940,7 +1987,10 @@ function handleAttendancePhoto(event) {
       canvas.width = Math.max(1, Math.round(image.width * scale));
       canvas.height = Math.max(1, Math.round(image.height * scale));
       canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-      attendanceState.photos[normalizeStudentName(attendanceState.students[attendanceState.editIndex].originalName)] = canvas.toDataURL('image/jpeg', 0.78);
+      const normName = normalizeStudentName(attendanceState.students[attendanceState.editIndex].originalName);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+      attendanceState.photos[normName] = dataUrl;
+      setGlobalPhoto(normName, dataUrl); // sync to global store
       selectAttendanceStudentForEdit(attendanceState.editIndex);
     };
     image.src = reader.result;
@@ -2000,7 +2050,10 @@ function captureAttendancePhoto() {
   
   const student = attendanceState.students[attendanceState.editIndex];
   if (student) {
-    attendanceState.photos[normalizeStudentName(student.originalName)] = canvas.toDataURL('image/jpeg', 0.85);
+    const normName = normalizeStudentName(student.originalName);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    attendanceState.photos[normName] = dataUrl;
+    setGlobalPhoto(normName, dataUrl); // sync to global store immediately
   }
   stopAttendanceCamera();
 }
@@ -2014,8 +2067,11 @@ function saveAttendanceStudent() {
   const overrides = attendanceReadLocal(`gv_attendance_names_${attendanceState.classId}`, {});
   overrides[normalizeStudentName(student.originalName)] = name;
   localStorage.setItem(`gv_attendance_names_${attendanceState.classId}`, JSON.stringify(overrides));
-  localStorage.setItem(`gv_attendance_photos_${attendanceState.classId}`, JSON.stringify(attendanceState.photos));
-  closeAttendanceStudentEditor(); renderAttendanceStudents(); showToast('Student details saved for this class.');
+  // Save photos to global store
+  const normName = normalizeStudentName(student.originalName);
+  const photo = attendanceState.photos[normName];
+  if (photo) setGlobalPhoto(normName, photo);
+  closeAttendanceStudentEditor(); renderAttendanceStudents(); showToast('Student details saved.');
 }
 
 function removeAttendanceStudent() {

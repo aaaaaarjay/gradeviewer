@@ -875,7 +875,7 @@ function renderResults(list, query = '') {
     ${list.map(s => `
       <div class="result-card" onclick="showStudent(${s.no})" id="result-${s.no}">
         <div class="result-card-left">
-          <div class="result-avatar">${getInitial(s.name)}</div>
+          <div class="result-avatar">${getAvatarHTML(s.name)}</div>
           <div>
             <div class="result-name">${highlightMatch(escapeHTML(s.name), query)}</div>
             <div class="result-num">Student #${s.no}</div>
@@ -1033,7 +1033,7 @@ function buildStudentHTML(s, isLocked = false) {
     ${revealCodeBtn}
 
     <div class="student-name-banner">
-      <div class="student-big-avatar">${getInitial(s.name)}</div>
+      <div class="student-big-avatar">${getAvatarHTML(s.name, true)}</div>
       <div class="student-name-info">
         <h2>${escapeHTML(s.name)}</h2>
         <p>Student #${s.no}</p>
@@ -1379,6 +1379,23 @@ function getInitial(name) {
   const parts = name.trim().split(/[\s,]+/);
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
   return name.trim().slice(0, 2).toUpperCase();
+}
+
+function normalizeStudentName(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function getAvatarHTML(name, isBig = false) {
+  try {
+    const photos = JSON.parse(localStorage.getItem('gv_student_photos') || '{}');
+    const photo = photos[normalizeStudentName(name)];
+    if (photo) {
+      return `<img src="${photo}" alt="Avatar" style="width:100%; height:100%; object-fit:cover; border-radius:inherit;" />`;
+    }
+  } catch (e) { }
+  
+  // Fallback to initials
+  return getInitial(name);
 }
 
 function gradeToPercent(grade) {
