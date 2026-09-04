@@ -1675,7 +1675,8 @@ function populateAttendanceClassSelect() {
 }
 
 function attendanceScheduleDays(cls, rows = []) {
-  let source = `${cls?.name || ''} ${cls?.description || ''}`.toUpperCase();
+  // Read from 'schedule' (renamed from 'description') for day detection, with fallback for old data
+  let source = `${cls?.name || ''} ${cls?.schedule || ''} ${cls?.description || ''}`.toUpperCase();
   for (const row of rows.slice(0, 8)) {
     row.forEach((value, index) => {
       if (/^days?:?$/i.test(String(value || '').trim())) {
@@ -1855,16 +1856,20 @@ function loadAttendanceNote() {
 }
 
 async function saveAttendance() {
+  // Fall back to the dropdown's selected value if attendanceState.date was not set
+  if (!attendanceState.date) {
+    attendanceState.date = document.getElementById('attendance-date-select')?.value || '';
+  }
   if (!attendanceState.classId || !attendanceState.date) { showToast('Select a class and date before saving attendance.'); return; }
   const cls = classList.find(item => item.id === attendanceState.classId);
   const sheetId = cls ? extractSheetId(cls.url) : '';
   const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
-  if (!scriptUrl || !sheetId) { showToast('Attendance saved locally only. Configure the Apps Script URL and class Google Sheet first.'); return; }
   const activeStudents = attendanceState.students.filter(student => !student.removed);
   const statuses = {};
   activeStudents.forEach(student => { statuses[normalizeStudentName(student.originalName)] = Boolean(attendanceState.records[normalizeStudentName(student.originalName)]); });
   const localKey = attendanceKey(attendanceState.classId, attendanceState.period, attendanceState.date);
   localStorage.setItem(localKey, JSON.stringify({ records: statuses, savedAt: new Date().toISOString() }));
+  if (!scriptUrl || !sheetId) { showToast('✅ Attendance saved locally. (Configure Apps Script URL to also sync to Google Sheets.)'); return; }
   showToast('Saving attendance to the Attendance sheet...');
   try {
     const response = await fetch(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({
