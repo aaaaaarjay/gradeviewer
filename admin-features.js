@@ -213,13 +213,17 @@ function refreshStudentSidePanelPhoto() {
   const preview = document.getElementById('students-photo-preview');
   const empty = document.getElementById('students-photo-empty');
   
+  const removeBtn = document.getElementById('students-photo-remove-btn');
+  
   if (photo) {
     preview.src = photo;
     preview.classList.remove('hidden');
     empty.classList.add('hidden');
+    if (removeBtn) removeBtn.classList.remove('hidden');
   } else {
     preview.classList.add('hidden');
     empty.classList.remove('hidden');
+    if (removeBtn) removeBtn.classList.add('hidden');
   }
 }
 
@@ -299,6 +303,15 @@ function handleStudentsPhoto(event) {
   event.target.value = '';
 }
 
+function removeStudentsPhoto() {
+  if (!currentStudentProfile) return;
+  if (!confirm(`Are you sure you want to remove the photo for ${currentStudentProfile.name}?`)) return;
+  
+  setGlobalPhoto(currentStudentProfile.normName, null);
+  refreshStudentSidePanelPhoto();
+  filterStudentsDirectory(); // update list thumbnail
+}
+
 window.loadAllStudentsGlobal = loadAllStudentsGlobal;
 window.filterStudentsDirectory = filterStudentsDirectory;
 window.openStudentSidePanel = openStudentSidePanel;
@@ -307,6 +320,7 @@ window.startStudentsCamera = startStudentsCamera;
 window.stopStudentsCamera = stopStudentsCamera;
 window.captureStudentsPhoto = captureStudentsPhoto;
 window.handleStudentsPhoto = handleStudentsPhoto;
+window.removeStudentsPhoto = removeStudentsPhoto;
 
 
 /* ─── ATTENDANCE TRACKER ─── */
