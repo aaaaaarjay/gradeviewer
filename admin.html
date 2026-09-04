@@ -53,15 +53,18 @@
       </div>
 
       <div class="sidebar-nav">
+        <button class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
+          <span class="nav-icon">🏠</span> Dashboard
+        </button>
+
         <div class="nav-section-label">Management</div>
 
-        <button class="nav-item active" id="nav-classes" onclick="showPage('classes')">
+        <button class="nav-item" id="nav-classes" onclick="showPage('classes')">
           <span class="nav-icon">📚</span> Classes
         </button>
 
         <button class="nav-item" id="nav-students" onclick="showPage('students')">
           <span class="nav-icon">👥</span> Students
-          <span class="nav-badge soon">Soon</span>
         </button>
 
         <button class="nav-item" id="nav-groups" onclick="showPage('groups')">
@@ -117,7 +120,49 @@
       </div>
 
       <!-- ── CLASSES PAGE ── -->
-      <div class="admin-page active" id="page-classes">
+      <div class="admin-page active" id="page-dashboard">
+        <div class="page-header dashboard-page-header">
+          <div>
+            <div class="page-title">🏠 Dashboard</div>
+            <div class="page-sub">Welcome to your Teacher Portal. Choose a tool to get started.</div>
+          </div>
+          <button class="btn btn-primary" onclick="showPage('classes')">＋ Manage Classes</button>
+        </div>
+
+        <div class="dashboard-stats">
+          <div class="dashboard-stat-card dashboard-stat-primary">
+            <div class="dashboard-stat-icon">📚</div>
+            <div><div class="dashboard-stat-value" id="dashboard-class-count">0</div><div class="dashboard-stat-label">Connected classes</div></div>
+          </div>
+          <div class="dashboard-stat-card">
+            <div class="dashboard-stat-icon">🔗</div>
+            <div><div class="dashboard-stat-value" id="dashboard-sheet-count">0</div><div class="dashboard-stat-label">Google Sheets linked</div></div>
+          </div>
+          <div class="dashboard-stat-card">
+            <div class="dashboard-stat-icon">🔐</div>
+            <div><div class="dashboard-stat-value" id="dashboard-code-count">0</div><div class="dashboard-stat-label">Protected sections</div></div>
+          </div>
+        </div>
+
+        <div class="dashboard-layout">
+          <div class="panel dashboard-tools-panel">
+            <div class="panel-header"><div class="panel-title">⚡ Quick Actions</div></div>
+            <div class="panel-body dashboard-tools-grid">
+              <button class="dashboard-tool-card" onclick="showPage('scores')"><span class="dashboard-tool-icon">📝</span><span><strong>Score Recorder</strong><small>Enter and save student scores</small></span><span class="dashboard-tool-arrow">→</span></button>
+              <button class="dashboard-tool-card" onclick="showPage('attendance')"><span class="dashboard-tool-icon">📅</span><span><strong>Attendance</strong><small>Mark attendance for a class</small></span><span class="dashboard-tool-arrow">→</span></button>
+              <button class="dashboard-tool-card" onclick="showPage('groups')"><span class="dashboard-tool-icon">🧩</span><span><strong>Groups</strong><small>Create or manage student groups</small></span><span class="dashboard-tool-arrow">→</span></button>
+              <button class="dashboard-tool-card" onclick="showPage('picker')"><span class="dashboard-tool-icon">🎰</span><span><strong>Random Picker</strong><small>Pick a student at random</small></span><span class="dashboard-tool-arrow">→</span></button>
+            </div>
+          </div>
+
+          <div class="panel dashboard-classes-panel">
+            <div class="panel-header"><div class="panel-title">📋 Your Classes</div><button class="btn btn-ghost btn-sm" onclick="showPage('classes')">View all</button></div>
+            <div class="panel-body" id="dashboard-class-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-page" id="page-classes">
         <div class="page-header">
           <div class="page-title">📚 Classes</div>
           <div class="page-sub">Manage your connected Google Sheets class records.</div>
@@ -451,20 +496,27 @@
                   <button class="btn btn-ghost btn-sm" onclick="initGroups()">🎡 Spin Mode</button>
                 </div>
                 
-                <button class="btn btn-primary" id="btn-spin-group" onclick="spinToAssignGroup()" style="display:none;">🎡 Spin to Assign</button>
                 <button class="btn btn-ghost" id="btn-add-group" onclick="addGroupBox()" style="display:none;">➕ Add Group</button>
                 <button class="btn btn-danger" id="btn-reset-group" onclick="resetGroups()" style="display:none;">🔄 Reset</button>
                 <div style="flex:1"></div>
                 <button class="btn btn-ghost" onclick="copyGroupsForSheets()" title="Copy to paste into Google Sheets">📋 Copy for Sheets</button>
                 <button class="btn btn-ghost" onclick="toggleEditGroups()">✏️ Edit Groups</button>
-                <button class="btn btn-primary" onclick="saveGroups()">💾 Save Groups</button>
+                <button class="btn btn-primary" onclick="saveGroups()">☁ Save to Online</button>
               </div>
+
+              <div id="groups-saved-warning" class="groups-saved-warning hidden">🔒 This section already has saved groups. Randomize, Spin Mode, and manual assignment are locked to protect the saved groups.</div>
+              <div class="groups-spin-center"><button class="btn btn-primary" id="btn-spin-group" onclick="spinToAssignGroup()" style="display:none;">🎡 Spin to Assign</button></div>
 
               <!-- Unassigned Pool -->
               <div id="unassigned-pool" class="hidden" style="margin-bottom: 2rem; border:1px solid var(--border); padding:1rem; border-radius:8px; background:rgba(0,0,0,0.2);">
                 <div style="font-size:0.85rem; font-weight:700; color:var(--muted); margin-bottom:0.75rem; display:flex; justify-content:space-between;">
                   <span>UNASSIGNED STUDENTS (<span id="unassigned-count">0</span>)</span>
                   <button class="btn btn-primary btn-sm" onclick="randomizeRemaining()">🎲 Auto-Assign All</button>
+                </div>
+                <div class="manual-group-assignment">
+                  <select id="manual-student-select" class="form-input"><option value="">Select a student</option></select>
+                  <select id="manual-group-select" class="form-input"><option value="">Select a group</option></select>
+                  <button class="btn btn-primary btn-sm" onclick="assignStudentManually()">Assign Student</button>
                 </div>
                 <div id="unassigned-list" style="display:flex; flex-wrap:wrap; gap:0.5rem; max-height:200px; overflow-y:auto;">
                   <!-- rendered by JS -->
@@ -488,6 +540,7 @@
             <div class="page-sub">View saved groups and record one score for every group member.</div>
           </div>
           <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-primary" onclick="saveSavedGroupsOnline()">Save to Online</button>
             <button class="btn btn-danger" onclick="deleteAllSavedGroups()">🗑 Delete All Groups</button>
             <button class="btn btn-ghost" onclick="showPage('groups')">← Groups Manager</button>
             <button class="btn btn-ghost" onclick="toggleFullscreen('page-saved-groups')" title="Toggle Fullscreen">⛶</button>
@@ -516,7 +569,7 @@
               </div>
             </div>
             <div class="panel-body">
-              <p id="saved-groups-help" class="scores-setup-help">Click <strong>Score</strong> beside a group, then choose Group Score or Individual Scores.</p>
+              <p id="saved-groups-help" class="scores-setup-help">Only groups saved online in this class’s <strong>Groups</strong> sheet appear here. Click <strong>Score</strong> beside a group to score it.</p>
               <div id="saved-groups-list" class="saved-groups-list"></div>
             </div>
           </div>
@@ -694,6 +747,89 @@
             </div>
           </div>
         </div>
+      <!-- ── STUDENTS PAGE ── -->
+      <div class="admin-page" id="page-students">
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">👥 Students Directory</div>
+            <div class="page-sub">View and search through your student rosters.</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+            <div style="flex:1; min-width:200px;">
+              <select id="students-class-select" class="form-input" onchange="loadStudentsDirectory()">
+                <option value="">-- Select a Class --</option>
+              </select>
+            </div>
+            <div style="flex:2; min-width:250px; position:relative;">
+              <span style="position:absolute; left:1rem; top:50%; transform:translateY(-50%);">🔍</span>
+              <input type="text" id="students-search-input" class="form-input" style="padding-left:2.5rem;" placeholder="Search for a student..." oninput="filterStudentsDirectory()" />
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="class-table">
+              <thead>
+                <tr>
+                  <th style="width:50px;">#</th>
+                  <th>Student Name</th>
+                  <th>Class</th>
+                  <th>Groups</th>
+                </tr>
+              </thead>
+              <tbody id="students-directory-tbody">
+                <tr><td colspan="4" style="text-align:center; color:var(--muted); padding:2rem;">Select a class to view students.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ATTENDANCE PAGE ── -->
+      <div class="admin-page" id="page-attendance">
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">📅 Attendance Tracker</div>
+            <div class="page-sub">Mark daily attendance for your classes.</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header" style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+            <div style="flex:1; min-width:200px;">
+              <select id="attendance-class-select" class="form-input" onchange="loadClassForAttendance()">
+                <option value="">-- Select a Class --</option>
+              </select>
+            </div>
+            <div style="flex:1; min-width:180px;">
+              <input type="date" id="attendance-date" class="form-input" onchange="loadClassForAttendance()" />
+            </div>
+            <div>
+              <button class="btn btn-primary" onclick="markAllPresent()">✅ Mark All Present</button>
+            </div>
+          </div>
+          <div style="padding: 1rem 1.25rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); background:var(--surface2);">
+            <div style="font-size:0.85rem; color:var(--muted); font-weight:600;">
+              <span id="attendance-stats">0 Present / 0 Total</span>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="saveAttendance()">💾 Save Attendance</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="class-table" id="attendance-table">
+              <thead>
+                <tr>
+                  <th style="width:50px;">#</th>
+                  <th>Student Name</th>
+                  <th style="width:300px; text-align:center;">Status</th>
+                </tr>
+              </thead>
+              <tbody id="attendance-tbody">
+                <tr><td colspan="3" style="text-align:center; color:var(--muted); padding:2rem;">Select a class to mark attendance.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
     </main>
@@ -725,6 +861,7 @@
   <script src="admin.js"></script>
   <script src="admin-tools.js"></script>
   <script src="score-recorder.js"></script>
+  <script src="admin-features.js"></script>
 </body>
 
 </html>

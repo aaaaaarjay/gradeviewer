@@ -136,6 +136,7 @@ async function saveClassList() {
    NAVIGATION
    ═══════════════════════════════════════════════ */
 const PAGE_TITLES = {
+  dashboard:  'Dashboard',
   classes:    'Classes',
   scores:     'Score Recorder',
   students:   'Students',
@@ -146,6 +147,46 @@ const PAGE_TITLES = {
   'saved-groups': 'Saved Groups',
   picker:     'Random Picker',
 };
+
+function renderDashboard() {
+  const classCount = document.getElementById('dashboard-class-count');
+  const sheetCount = document.getElementById('dashboard-sheet-count');
+  const codeCount = document.getElementById('dashboard-code-count');
+  const classListEl = document.getElementById('dashboard-class-list');
+  if (!classCount || !sheetCount || !codeCount || !classListEl) return;
+
+  const linkedSheets = classList.filter(cls => String(cls.url || '').trim()).length;
+  const protectedSections = classList.filter(cls => String(cls.classKey || '').trim()).length;
+  classCount.textContent = classList.length;
+  sheetCount.textContent = linkedSheets;
+  codeCount.textContent = protectedSections;
+
+  if (!classList.length) {
+    classListEl.innerHTML = `
+      <div class="dashboard-empty-state">
+        <div class="dashboard-empty-icon">📚</div>
+        <strong>No classes connected yet</strong>
+        <span>Add your first Google Sheet to begin.</span>
+        <button class="btn btn-primary btn-sm" onclick="showPage('classes')">Add a Class</button>
+      </div>`;
+    return;
+  }
+
+  const visibleClasses = classList.slice(0, 7);
+  classListEl.innerHTML = `
+    <div class="dashboard-class-rows">
+      ${visibleClasses.map(cls => `
+        <div class="dashboard-class-row">
+          <div class="dashboard-class-avatar">${escapeHTML(String(cls.name || 'C').trim().charAt(0).toUpperCase())}</div>
+          <div class="dashboard-class-info">
+            <strong>${escapeHTML(cls.name || 'Unnamed class')}</strong>
+            <span>${escapeHTML(cls.description || (cls.url ? 'Google Sheet connected' : 'Google Sheet link needed'))}</span>
+          </div>
+          <span class="dashboard-class-status ${cls.url ? 'connected' : 'missing'}">${cls.url ? 'Connected' : 'Needs link'}</span>
+        </div>`).join('')}
+    </div>
+    ${classList.length > visibleClasses.length ? `<button class="dashboard-more-classes" onclick="showPage('classes')">View all ${classList.length} classes →</button>` : ''}`;
+}
 
 function showPage(id) {
   // Hide all pages
@@ -163,6 +204,7 @@ function showPage(id) {
    CLASSES PAGE
    ═══════════════════════════════════════════════ */
 function renderClassTable() {
+  renderDashboard();
   const wrap = document.getElementById('class-table-wrap');
   const countEl = document.getElementById('class-count');
   countEl.textContent = classList.length + ' class' + (classList.length !== 1 ? 'es' : '');

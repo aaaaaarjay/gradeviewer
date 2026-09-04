@@ -109,7 +109,7 @@ function normalizeStudentName(value) {
 const workbookCache = new Map();
 let lastSpreadsheetLoadError = '';
 
-async function fetchWorkbookForClass(classId) {
+async function fetchWorkbookForClass(classId, forceRefresh = false) {
   lastSpreadsheetLoadError = '';
   const cls = classList.find(c => c.id === classId);
   if (!cls || !cls.url) {
@@ -122,10 +122,11 @@ async function fetchWorkbookForClass(classId) {
     lastSpreadsheetLoadError = 'The class link is not a Google Sheets URL. Open the class settings and paste the spreadsheet link, not the Apps Script deployment link.';
     return null;
   }
-  if (workbookCache.has(sheetId)) return workbookCache.get(sheetId);
+  if (!forceRefresh && workbookCache.has(sheetId)) return workbookCache.get(sheetId);
 
   try {
-    const fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`;
+    const cacheBuster = forceRefresh ? `&gv_refresh=${Date.now()}` : '';
+    const fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx${cacheBuster}`;
     const res = await fetch(fetchUrl);
     if (!res.ok) {
       lastSpreadsheetLoadError = `The Google Sheet could not be read (HTTP ${res.status}). Check that the class link is a Google Sheets link and that the sheet is shared for viewing.`;
@@ -340,6 +341,7 @@ document.getElementById('nav-groups').addEventListener('click', () => {
   const select = document.getElementById('group-class-select');
   select.innerHTML = '<option value="">-- Select a Class --</option>' + 
     classList.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  refreshGroupClassIndicators();
 });
 
 let savedGroupsPageGroups = [];
@@ -348,6 +350,85 @@ let savedGroupsPageSheet = null;
 let savedGroupsPageWorkbook = null;
 const GROUP_SCORE_STORAGE_PERIOD = 'Groups';
 const GROUP_SCORE_STORAGE_CATEGORY = 'Group';
+let groupClassSavedStatus = new Map();
+let groupsAssignmentLocked = false;
+
+function localGroupsForClass(classId) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
+    return Array.isArray(saved[classId]) ? saved[classId].filter(group => group?.students?.length) : [];
+  } catch (_) { return []; }
+}
+
+function findGroupsSheetLayout(wb) {
+  const sheetName = (wb?.SheetNames || []).find(name => normalizeSheetName(name) === 'groups');
+  if (!sheetName) return null;
+  const rows = getSheetRows(wb, sheetName);
+  if (!rows.length) return null;
+
+  // Normally the Groups sheet headers are on row 1. Also accept a few
+  // leading blank/formatting rows so detection still works if the sheet was
+  // manually formatted before the portal saved it.
+  for (let rowIndex = 0; rowIndex < Math.min(rows.length, 10); rowIndex++) {
+    const headers = rows[rowIndex].map(value => normalizeSheetName(value));
+    const studentCol = headers.findIndex(value => ['allstudents', 'student', 'students', 'name', 'names'].includes(value));
+    const groupCol = headers.findIndex(value => value === 'groupnumber' || value === 'group' || value === 'groupname');
+    const membersCol = headers.findIndex(value => value === 'groupmembers' || value === 'members');
+    if (studentCol >= 0 && (groupCol >= 0 || membersCol >= 0)) {
+      return { sheetName, rows, headerRow: rowIndex, studentCol, groupCol, membersCol };
+    }
+  }
+  return null;
+}
+
+function onlineGroupsExistInWorkbook(wb) {
+  const layout = findGroupsSheetLayout(wb);
+  if (!layout) return false;
+  const { rows, headerRow, studentCol, groupCol, membersCol } = layout;
+  return rows.slice(headerRow + 1).some(row => {
+    const groupNumber = groupCol >= 0 ? String(row[groupCol] || '').trim() : '';
+    const groupMembers = membersCol >= 0 ? String(row[membersCol] || '').trim() : '';
+    // Any assigned group number/member entry is enough to identify that the
+    // section has online groups. Do not require column A to be populated: an
+    // older Groups-sheet layout may keep the member name only in column F.
+    return Boolean(groupNumber || groupMembers);
+  });
+}
+
+async function refreshGroupClassIndicators() {
+  const select = document.getElementById('group-class-select');
+  if (!select || !classList.length) return;
+  // The dropdown indicator represents online groups only. Local-only groups
+  // remain visible in Groups Manager so they can still be uploaded.
+  classList.forEach(cls => groupClassSavedStatus.set(cls.id, false));
+  select.innerHTML = '<option value="">-- Select a Class --</option>' + classList.map(cls => {
+    const savedLabel = groupClassSavedStatus.get(cls.id) ? ' — ✓ Groups saved' : '';
+    return `<option value="${escapeAttr(cls.id)}">${escapeHTML(cls.name + savedLabel)}</option>`;
+  }).join('');
+  // Check the online Groups sheet as well so the indicator is accurate on a
+  // new browser where there is no local group data.
+  const statuses = await Promise.all(classList.map(async cls => {
+    const wb = await fetchWorkbookForClass(cls.id, true);
+    return [cls.id, onlineGroupsExistInWorkbook(wb)];
+  }));
+  statuses.forEach(([id, online]) => { if (online) groupClassSavedStatus.set(id, true); });
+  const current = select.value;
+  select.innerHTML = '<option value="">-- Select a Class --</option>' + classList.map(cls => {
+    const savedLabel = groupClassSavedStatus.get(cls.id) ? ' — ✓ Groups saved' : '';
+    return `<option value="${escapeAttr(cls.id)}">${escapeHTML(cls.name + savedLabel)}</option>`;
+  }).join('');
+  if (classList.some(cls => cls.id === current)) select.value = current;
+}
+
+function showGroupsSavedWarning() {
+  alert('This section already has saved groups. You cannot randomize, spin, or assign another group because it could erase the saved groups.');
+  showToast('🔒 Saved groups are protected.');
+}
+
+function setGroupsAssignmentLocked(locked) {
+  groupsAssignmentLocked = Boolean(locked);
+  document.getElementById('groups-saved-warning')?.classList.toggle('hidden', !groupsAssignmentLocked);
+}
 
 function openSavedGroupsPage() {
   const source = document.getElementById('group-class-select');
@@ -373,6 +454,9 @@ async function loadClassForGroups() {
   btn.disabled = true;
 
   currentStudents = await fetchStudentsForClass(classId);
+  const classWorkbook = await fetchWorkbookForClass(classId, true);
+  const onlineGroups = parseGroupsSheet(classWorkbook, currentStudents);
+  const onlineGroupsExist = onlineGroupsExistInWorkbook(classWorkbook);
   
   btn.textContent = 'Load Students';
   btn.disabled = false;
@@ -395,9 +479,22 @@ async function loadClassForGroups() {
   
   // Try loading existing saved groups first
   const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
-  if (saved[classId] && saved[classId].length > 0) {
+  const localGroups = Array.isArray(saved[classId]) ? saved[classId] : [];
+  const savedGroups = onlineGroups.length ? onlineGroups : localGroups;
+  const hasOnlineGroups = onlineGroupsExist;
+  const hasSavedGroups = savedGroups.length > 0;
+  groupClassSavedStatus.set(classId, hasOnlineGroups);
+  const selectedClassOption = Array.from(document.getElementById('group-class-select').options)
+    .find(option => option.value === classId);
+  if (selectedClassOption) {
+    selectedClassOption.textContent = `${cls?.name || 'Class'}${hasOnlineGroups ? ' — ✓ Groups saved' : ''}`;
+  }
+  // Local-only groups are editable/uploadable. Only groups confirmed in the
+  // online Groups sheet protect the section from replacement.
+  setGroupsAssignmentLocked(hasOnlineGroups);
+  if (hasSavedGroups) {
     const validNames = new Set(currentStudents.map(normalizeStudentName));
-    currentGroups = saved[classId].map(group => ({
+    currentGroups = savedGroups.map(group => ({
       ...group,
       students: (Array.isArray(group.students) ? group.students : [])
         .filter(student => validNames.has(normalizeStudentName(student)))
@@ -410,8 +507,8 @@ async function loadClassForGroups() {
     
     document.getElementById('unassigned-pool').classList.remove('hidden');
     document.getElementById('btn-spin-group').style.display = unassignedPool.length ? 'inline-flex' : 'none';
-    document.getElementById('btn-add-group').style.display = 'inline-flex';
-    document.getElementById('btn-reset-group').style.display = 'inline-flex';
+    document.getElementById('btn-add-group').style.display = hasOnlineGroups ? 'none' : 'inline-flex';
+    document.getElementById('btn-reset-group').style.display = hasOnlineGroups ? 'none' : 'inline-flex';
     
     groupsEditMode = false;
     renderUnassigned();
@@ -420,6 +517,7 @@ async function loadClassForGroups() {
   } else {
     // No saved groups, initialize empty
     currentGroups = [];
+      setGroupsAssignmentLocked(hasOnlineGroups);
     unassignedPool = [...currentStudents];
     document.getElementById('unassigned-pool').classList.add('hidden'); // Hide pool until Set Up is clicked
     document.getElementById('btn-spin-group').style.display = 'none';
@@ -435,6 +533,7 @@ async function loadClassForGroups() {
 
 // Instant auto-randomize (original behaviour) — no spin
 function randomizeGroupsAuto() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (currentStudents.length === 0) {
     showToast('❌ Load students first.');
     return;
@@ -475,6 +574,7 @@ function randomizeGroupsAuto() {
 }
 
 function resetGroups() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (!confirm("Are you sure you want to reset all groups? This cannot be undone unless you reload.")) return;
   currentGroups = [];
   unassignedPool = [...currentStudents];
@@ -488,6 +588,7 @@ function resetGroups() {
 
 // Sets up empty group cards and puts everyone in unassigned pool
 function initGroups() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (currentStudents.length === 0) return;
   
   const count = parseInt(document.getElementById('group-count-input').value) || 5;
@@ -542,13 +643,19 @@ function copyGroupsForSheets() {
 }
 
 function addGroupBox() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   const idx = currentGroups.length;
   currentGroups.push({ id: 'group_' + idx, name: 'Group ' + (idx + 1), students: [] });
   renderGroups();
+  renderUnassigned();
 }
 
 function renderUnassigned() {
   document.getElementById('unassigned-count').textContent = unassignedPool.length;
+  const studentSelect = document.getElementById('manual-student-select');
+  const groupSelect = document.getElementById('manual-group-select');
+  if (studentSelect) studentSelect.innerHTML = '<option value="">Select a student</option>' + unassignedPool.map((student, index) => `<option value="${index}">${escapeHTML(student)}</option>`).join('');
+  if (groupSelect) groupSelect.innerHTML = '<option value="">Select a group</option>' + currentGroups.map((group, index) => `<option value="${index}">${escapeHTML(group.name)}</option>`).join('');
   document.getElementById('unassigned-list').innerHTML = unassignedPool.map((s, idx) => `
     <div class="unassigned-student" draggable="true" ondragstart="dragUnassigned(event, ${idx})">
       ${escapeHTML(s)}
@@ -560,7 +667,25 @@ function renderUnassigned() {
   }
 }
 
+function assignStudentManually() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
+  const studentSelect = document.getElementById('manual-student-select');
+  const groupSelect = document.getElementById('manual-group-select');
+  const studentIndex = Number(studentSelect?.value);
+  const groupIndex = Number(groupSelect?.value);
+  if (!studentSelect || !groupSelect || studentSelect.value === '' || groupSelect.value === '' || !Number.isInteger(studentIndex) || !Number.isInteger(groupIndex)) {
+    showToast('Select a student and a group first.');
+    return;
+  }
+  const student = unassignedPool.splice(studentIndex, 1)[0];
+  if (!student || !currentGroups[groupIndex]) return;
+  currentGroups[groupIndex].students.push(student);
+  renderUnassigned();
+  renderGroups();
+}
+
 function randomizeRemaining() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (unassignedPool.length === 0 || currentGroups.length === 0) return;
   
   // Shuffle unassigned
@@ -589,6 +714,7 @@ function randomizeRemaining() {
 
 // Intense Spin for Groups
 function spinToAssignGroup() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (unassignedPool.length === 0) {
     showToast("No students left to assign!");
     return;
@@ -715,6 +841,7 @@ function showWinnerGroup(winnerName, winnerIdx) {
 }
 
 window.acceptGroupWinner = function(studentIdx, groupIdx) {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   const overlay = document.getElementById('groups-spin-overlay');
   if (overlay) overlay.remove();
   
@@ -731,6 +858,7 @@ window.acceptGroupWinner = function(studentIdx, groupIdx) {
 }
 
 function toggleEditGroups() {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   groupsEditMode = !groupsEditMode;
   renderGroups();
   showToast(groupsEditMode ? "✏️ Edit Mode ON" : "🔒 Edit Mode OFF");
@@ -758,6 +886,7 @@ function renderGroups() {
 }
 
 window.removeStudentFromGroup = function(gidx, sidx) {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   const student = currentGroups[gidx].students.splice(sidx, 1)[0];
   unassignedPool.push(student);
   renderGroups();
@@ -765,6 +894,7 @@ window.removeStudentFromGroup = function(gidx, sidx) {
 }
 
 window.deleteGroup = function(gidx) {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   // Move all students in this group back to unassigned pool
   const removed = currentGroups.splice(gidx, 1)[0];
   unassignedPool.push(...removed.students);
@@ -780,6 +910,7 @@ window.deleteGroup = function(gidx) {
 }
 
 function updateGroupName(gidx, newName) {
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   if (currentGroups[gidx]) currentGroups[gidx].name = newName;
 }
 
@@ -800,6 +931,7 @@ function drag(ev, fromGroupIdx, studentIdx) {
 
 function drop(ev, toGroupIdx) {
   ev.preventDefault();
+  if (groupsAssignmentLocked) { showGroupsSavedWarning(); return; }
   const fromGroup = ev.dataTransfer.getData("fromGroup");
   const fromUnassigned = ev.dataTransfer.getData("fromUnassigned");
   const studentIdx = ev.dataTransfer.getData("studentIdx");
@@ -894,6 +1026,8 @@ async function syncGroupsToSheets(classId) {
 
     const sheetIdForCache = extractSheetId(cls.url);
     if (sheetIdForCache) workbookCache.delete(sheetIdForCache);
+    groupClassSavedStatus.set(classId, true);
+    setGroupsAssignmentLocked(true);
     showToast('✅ Groups saved online in the Groups sheet.');
   } catch (error) {
     showToast(`⚠️ Groups saved locally, but online sync failed: ${error.message}`);
@@ -906,21 +1040,14 @@ async function syncGroupsToSheets(classId) {
    ═══════════════════════════════════════════════ */
 
 function parseGroupsSheet(wb, validStudents) {
-  const sheetName = (wb?.SheetNames || []).find(name => normalizeSheetName(name) === 'groups');
-  if (!sheetName) return [];
-
-  const rows = getSheetRows(wb, sheetName);
-  if (!rows.length) return [];
-  const header = rows[0].map(value => normalizeSheetName(value));
-  const studentCol = header.findIndex(value => ['allstudents', 'student', 'students', 'name', 'names'].includes(value));
-  const groupCol = header.findIndex(value => value === 'groupnumber' || value === 'group' || value === 'groupname');
-  const membersCol = header.findIndex(value => value === 'groupmembers' || value === 'members');
-  if (studentCol < 0 || groupCol < 0) return [];
+  const layout = findGroupsSheetLayout(wb);
+  if (!layout || layout.groupCol < 0) return [];
+  const { rows, headerRow, studentCol, groupCol, membersCol } = layout;
 
   // The Groups tab is the source of truth for group membership. Use its
   // All students column first so formatting differences in other tabs cannot
   // make valid group members appear as zero members.
-  const sheetRoster = new Map(rows.slice(1)
+  const sheetRoster = new Map(rows.slice(headerRow + 1)
     .map(row => String(row[studentCol] || '').trim())
     .filter(Boolean)
     .map(name => [normalizeStudentName(name), name]));
@@ -928,7 +1055,7 @@ function parseGroupsSheet(wb, validStudents) {
     ? new Set(sheetRoster.keys())
     : new Set((validStudents || []).map(normalizeStudentName));
   const byGroup = new Map();
-  for (let r = 1; r < rows.length; r++) {
+  for (let r = headerRow + 1; r < rows.length; r++) {
     const student = String(rows[r][studentCol] || '').trim();
     const groupName = String(rows[r][groupCol] || '').trim();
     if (!student || !groupName) continue;
@@ -984,12 +1111,11 @@ function getNextGroupScoreColumn(wb, group) {
 }
 
 function getSavedGroupsForClass(classId, validStudents, wb) {
-  const saved = JSON.parse(localStorage.getItem('gv_groups') || '{}');
   const valid = new Set((validStudents || []).map(normalizeStudentName));
   const onlineGroups = parseGroupsSheet(wb, validStudents);
-  const groups = onlineGroups.length
-    ? onlineGroups
-    : (Array.isArray(saved[classId]) ? saved[classId] : []);
+  // Saved Groups is an online view. Do not fall back to localStorage here,
+  // otherwise local-only groups appear online and delete/score actions fail.
+  const groups = onlineGroups;
   return groups.map((group, index) => ({
     id: group.id || `group_${index}`,
     name: group.name || `Group ${index + 1}`,
@@ -1067,6 +1193,43 @@ function renderSavedGroupsPage(scoreData = {}) {
         <div class="saved-group-status ${hasScore ? 'has-score' : ''}">${hasScore ? '✅ Score saved' : 'No score recorded yet'}</div>
       </article>`;
   }).join('');
+}
+
+async function saveSavedGroupsOnline() {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  const cls = classList.find(item => item.id === classId);
+  const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
+  const sheetId = cls ? extractSheetId(cls.url) : '';
+  if (!classId) { showToast('Select a class first.'); return; }
+  if (!savedGroupsPageGroups.length) { showToast('There are no saved groups to upload for this class.'); return; }
+  if (!scriptUrl) { showToast('Add the Apps Script Web App URL in Settings first.'); return; }
+  if (!sheetId) { showToast('This class does not have a valid Google Sheets link.'); return; }
+
+  showToast('Saving groups to the Groups sheet...');
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'saveGroups',
+        sheetId,
+        tabName: 'Groups',
+        sheetName: 'Groups',
+        studentNames: savedGroupsPageStudents,
+        groups: savedGroupsPageGroups.map(group => ({ id: group.id, name: group.name, students: group.students }))
+      })
+    });
+    const result = JSON.parse(await response.text());
+    const writes = Number(result.writeCount || result.updatedCells || 0);
+    const assigned = Number(result.assignedStudentCount || 0);
+    if (!response.ok || !result.success || writes <= 0 || assigned <= 0) {
+      throw new Error(result.error || 'No group assignments were written. Deploy the latest Apps Script version.');
+    }
+    workbookCache.delete(sheetId);
+    showToast('✅ Groups saved online in the Groups sheet.');
+  } catch (error) {
+    showToast(`⚠️ Groups are still local. Online save failed: ${error.message}`);
+  }
 }
 
 async function deleteSavedGroup(groupIndex) {
