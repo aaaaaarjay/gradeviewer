@@ -1860,7 +1860,13 @@ async function saveAttendance() {
   if (!attendanceState.date) {
     attendanceState.date = document.getElementById('attendance-date-select')?.value || '';
   }
-  if (!attendanceState.classId || !attendanceState.date) { showToast('Select a class and date before saving attendance.'); return; }
+  
+  // DEBUG: show what values we have
+  console.log('[saveAttendance] classId:', attendanceState.classId, '| date:', attendanceState.date, '| students:', attendanceState.students.length);
+  
+  if (!attendanceState.classId) { alert('⚠️ No class selected. Please select a class first.'); return; }
+  if (!attendanceState.date) { alert('⚠️ No date selected. Please select an attendance date first.'); return; }
+  
   const cls = classList.find(item => item.id === attendanceState.classId);
   const sheetId = cls ? extractSheetId(cls.url) : '';
   const scriptUrl = localStorage.getItem('gv_gsheets_script_url');
@@ -1869,7 +1875,12 @@ async function saveAttendance() {
   activeStudents.forEach(student => { statuses[normalizeStudentName(student.originalName)] = Boolean(attendanceState.records[normalizeStudentName(student.originalName)]); });
   const localKey = attendanceKey(attendanceState.classId, attendanceState.period, attendanceState.date);
   localStorage.setItem(localKey, JSON.stringify({ records: statuses, savedAt: new Date().toISOString() }));
-  if (!scriptUrl || !sheetId) { showToast('✅ Attendance saved locally. (Configure Apps Script URL to also sync to Google Sheets.)'); return; }
+  
+  if (!scriptUrl || !sheetId) { 
+    alert('✅ Attendance saved locally!\n\n' + Object.entries(statuses).filter(([,v]) => v).length + ' student(s) marked Present for ' + attendanceState.date + '.\n\n(To also sync to Google Sheets, configure the Apps Script URL in Settings.)'); 
+    return; 
+  }
+  
   showToast('Saving attendance to the Attendance sheet...');
   try {
     const response = await fetch(scriptUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({
@@ -1880,9 +1891,12 @@ async function saveAttendance() {
     const writes = Number(result.writeCount || result.updatedCells || 0);
     if (!response.ok || !result.success || writes <= 0) throw new Error(result.error || 'No attendance cells were updated.');
     workbookCache.delete(sheetId);
-    showToast(`✅ ${attendanceState.period} attendance for ${attendanceState.date} saved to Google Sheets.`);
-  } catch (error) { showToast(`⚠️ Attendance saved locally, but Sheets sync failed: ${error.message}`); }
+    alert(`✅ ${attendanceState.period} attendance for ${attendanceState.date} saved to Google Sheets!`);
+  } catch (error) { 
+    alert(`⚠️ Attendance saved locally, but Google Sheets sync failed:\n${error.message}`); 
+  }
 }
+
 
 function openAttendanceStudentEditor() {
   if (!attendanceState.students.length) { showToast('Load a class first.'); return; }
