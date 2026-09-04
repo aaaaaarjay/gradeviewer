@@ -301,6 +301,12 @@ function handleStudentsPhoto(event) {
 
 window.loadAllStudentsGlobal = loadAllStudentsGlobal;
 window.filterStudentsDirectory = filterStudentsDirectory;
+window.openStudentSidePanel = openStudentSidePanel;
+window.closeStudentSidePanel = closeStudentSidePanel;
+window.startStudentsCamera = startStudentsCamera;
+window.stopStudentsCamera = stopStudentsCamera;
+window.captureStudentsPhoto = captureStudentsPhoto;
+window.handleStudentsPhoto = handleStudentsPhoto;
 
 
 /* ─── ATTENDANCE TRACKER ─── */
