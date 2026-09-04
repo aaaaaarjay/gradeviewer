@@ -56,13 +56,19 @@ async function loadAllStudentsGlobal() {
       
       if (headerRow >= 0) {
         const header = rows[headerRow].map(c => String(c).toLowerCase().trim());
-        const colName = header.findIndex(h => h.includes('name'));
-        const colFG = header.findIndex(h => h === 'fg' || h.includes('final grade') || h === 'fg ');
+        const colName = header.findIndex(h => h.includes('name') || h === 'student');
+        const colFG = header.findIndex(h => h === 'fg' || h.includes('final grade') || h === 'fg ' || h === 'fc');
         
         for (let r = headerRow + 1; r < rows.length; r++) {
           const row = rows[r];
-          const nameVal = String(row[colName] || '').trim();
-          if (!nameVal || nameVal.toLowerCase() === 'student\'s name' || nameVal.length < 5) continue;
+          // Try exact column or scan nearby columns
+          let nameVal = '';
+          if (colName >= 0) nameVal = String(row[colName] || '').trim();
+          if (!nameVal || nameVal.toLowerCase() === 'student\'s name' || nameVal.length < 5) {
+             // Fallback to scanning the row for a valid roster name
+             nameVal = row.map(v => String(v || '').trim()).find(v => v.includes(',') && v.length > 5 && !/\d/.test(v)) || '';
+          }
+          if (!nameVal) continue;
           
           let fgVal = colFG >= 0 ? parseFloat(row[colFG]) : null;
           if (isNaN(fgVal)) fgVal = null;
@@ -75,8 +81,12 @@ async function loadAllStudentsGlobal() {
             fg: fgVal
           });
         }
-      } else {
-        // Fallback: just grab names using roster scanner
+      } 
+      
+      // If we couldn't parse the summary sheet well, fallback to the robust roster scanner for this class
+      // We only do this if no students were added for this class
+      if (!studentsDirectoryData.some(s => s.classId === cls.id)) {
+        console.log("Fallback parsing names for", cls.name);
         const names = collectNamesFromWorkbook(wb);
         names.forEach(nameVal => {
           studentsDirectoryData.push({
