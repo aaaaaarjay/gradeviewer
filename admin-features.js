@@ -241,12 +241,19 @@ function parseSchedule(scheduleStr) {
 
   // Find matching row
   let row = -1;
+  // First pass: exact match including AM/PM
   for (let i = 0; i < SCHEDULE_TIME_SLOTS.length; i++) {
     const slot = SCHEDULE_TIME_SLOTS[i];
     if (slot.start === startHHMM && slot.period === period) { row = i; break; }
-    // Also try hour-only match for edge cases
-    if (slot.start === startHHMM) { row = i; break; }
   }
+  
+  // Second pass: if no exact match (e.g. they didn't write AM/PM), match by time only
+  if (row < 0) {
+    for (let i = 0; i < SCHEDULE_TIME_SLOTS.length; i++) {
+      if (SCHEDULE_TIME_SLOTS[i].start === startHHMM) { row = i; break; }
+    }
+  }
+  
   if (row < 0) return null;
 
   return { row, col };
