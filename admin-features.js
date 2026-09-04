@@ -245,10 +245,6 @@ const SCHEDULE_TIMES = [
 
 const SCHEDULE_DAYS = ["MW", "TTH", "FS"];
 
-document.getElementById('nav-schedule').addEventListener('click', () => {
-  renderScheduleTable();
-});
-
 function renderScheduleTable() {
   const tbody = document.getElementById('schedule-tbody');
   const storedSchedule = JSON.parse(localStorage.getItem('gv_schedule') || '{}');

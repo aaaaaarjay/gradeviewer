@@ -146,6 +146,7 @@ const PAGE_TITLES = {
   groups:     'Groups',
   'saved-groups': 'Saved Groups',
   picker:     'Random Picker',
+  schedule:   'Schedule',
 };
 
 function renderDashboard() {
@@ -198,6 +199,7 @@ function showPage(id) {
   document.getElementById('topbar-title').textContent = PAGE_TITLES[id] || id;
   if (id === 'attendance' && typeof initAttendancePage === 'function') initAttendancePage();
   if (id === 'settings' && typeof initGSheetsSettings === 'function') initGSheetsSettings();
+  if (id === 'schedule' && typeof renderScheduleTable === 'function') renderScheduleTable();
 }
 
 /* ═══════════════════════════════════════════════
