@@ -1284,40 +1284,56 @@ html, body {
     border: none !important;
     margin: 0 !important;
     padding: 0 !important;
+    box-shadow: none !important;
   }
 
-  /* Force background color for print */
-  @page { margin: 0.5cm; }
+  /* Force portrait layout on legal paper */
+  @page { 
+    margin: 0.5cm; 
+    size: legal portrait; 
+  }
   
   body {
-    background: #4b5258 !important; /* Dark slate gray */
-    color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
   #schedule-print-container {
-    padding: 2rem !important;
-    background: #4b5258 !important;
-    min-height: 100vh;
+    padding: 0 !important;
+    background: #ffffff !important;
+    min-height: 0 !important; /* removes the 100vh so it only takes needed space */
   }
 
   .print-only-header {
-    display: block !important;
+    display: none !important; /* Hide the big header if not needed, or make it black */
+  }
+
+  .schedule-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
   }
 
   .schedule-table th, .schedule-time-col, .schedule-cell {
-    border: 1px solid #ffffff !important;
-    color: #ffffff !important;
-    background: transparent !important;
+    border: 1px solid #000000 !important;
+    color: #000000 !important;
+    padding: 6px !important;
+  }
+
+  /* Light green headers like the attachment */
+  .schedule-table th,
+  .schedule-time-col {
+    background: #b5e5a5 !important; /* exact light green */
+    font-weight: 600 !important;
   }
 
   .schedule-time-col {
-    font-size: 10pt !important;
+    font-size: 9pt !important;
   }
   
   .schedule-cell-content {
-    font-size: 11pt !important;
+    font-size: 10pt !important;
   }
 }
 /* Edit Mode styling */
