@@ -101,8 +101,11 @@ async function loadAllStudentsGlobal() {
       
     } catch (err) {
       console.warn("Failed to load class for directory:", cls.name, err);
+      alert(`Error loading ${cls.name}: ${err.message}`);
     }
   }
+  
+  alert(`Finished parsing. Found ${studentsDirectoryData.length} total students.`);
   
   progress.style.width = '100%';
   text.textContent = 'Processing and sorting...';
