@@ -199,59 +199,107 @@ window.saveAttendance = async function () {
   }
 };
 
-/* ─── CLASS SCHEDULE ─── */
+/* ─── CLASS SCHEDULE (auto-built from classList) ─── */
 
-const SCHEDULE_TIMES = [
-  "7:30 AM\nto\n9:00 AM",
-  "9:00 AM\nto\n10:30 AM",
-  "10:30 AM\nto\n12:00 PM",
-  "12:00 PM\nto\n1:30 PM",
-  "1:30 PM\nto\n3:00 PM",
-  "3:00 PM\nto\n4:30 PM",
-  "4:30 PM\nto\n6:00 PM",
-  "6:00 PM\nto\n7:30 PM",
-  "7:30 PM\nto\n9:00 PM"
+const SCHEDULE_TIME_SLOTS = [
+  { label: "7:30 AM\nTO\n9:00 AM",   start: "7:30",  period: "AM" },
+  { label: "9:00 AM\nTO\n10:30 AM",  start: "9:00",  period: "AM" },
+  { label: "10:30 AM\nTO\n12:00 PM", start: "10:30", period: "AM" },
+  { label: "12:00 PM\nTO\n1:30 PM",  start: "12:00", period: "PM" },
+  { label: "1:30 PM\nTO\n3:00 PM",   start: "1:30",  period: "PM" },
+  { label: "3:00 PM\nTO\n4:30 PM",   start: "3:00",  period: "PM" },
+  { label: "4:30 PM\nTO\n6:00 PM",   start: "4:30",  period: "PM" },
+  { label: "6:00 PM\nTO\n7:30 PM",   start: "6:00",  period: "PM" },
+  { label: "7:30 PM\nTO\n9:00 PM",   start: "7:30",  period: "PM" },
 ];
 
-const SCHEDULE_DAYS = ["MW", "TTH", "FS"];
+const SCHEDULE_DAY_COLS = ["MW", "TTH", "FS"];
+
+function parseSchedule(scheduleStr) {
+  if (!scheduleStr) return null;
+  const str = scheduleStr.trim().toUpperCase();
+
+  // Detect day column
+  let col = -1;
+  if (str.startsWith("MW"))       col = 0;
+  else if (str.startsWith("TTH") || str.startsWith("TH")) col = 1;
+  else if (str.startsWith("FS")  || str.startsWith("F"))  col = 2;
+  if (col < 0) return null;
+
+  // Extract time part after the day identifier
+  const timePart = str.replace(/^(TTH|MW|FS|TH|F)\s*/, '');
+  // Get the start time e.g. "9:00" from "9:00-10:30 AM"
+  const timeMatch = timePart.match(/(\d{1,2}):(\d{2})/);
+  if (!timeMatch) return null;
+  const startHHMM = timeMatch[1] + ':' + timeMatch[2]; // e.g. "9:00"
+
+  // Determine AM/PM
+  const isPM = timePart.includes('PM');
+  const startH = parseInt(timeMatch[1]);
+  // Normalize: if no AM/PM, guess by hour (< 7 → PM, >= 7 → AM unless hour < 12 with PM label)
+  const period = isPM ? 'PM' : 'AM';
+
+  // Find matching row
+  let row = -1;
+  for (let i = 0; i < SCHEDULE_TIME_SLOTS.length; i++) {
+    const slot = SCHEDULE_TIME_SLOTS[i];
+    if (slot.start === startHHMM && slot.period === period) { row = i; break; }
+    // Also try hour-only match for edge cases
+    if (slot.start === startHHMM) { row = i; break; }
+  }
+  if (row < 0) return null;
+
+  return { row, col };
+}
+
+function parseClassName(name) {
+  // Format: "IT WST21 - Section 9" → { subject: "IT WST21", section: "Section 9" }
+  const parts = name.split(' - ');
+  if (parts.length >= 2) {
+    return { subject: parts[0].trim(), section: parts.slice(1).join(' - ').trim() };
+  }
+  return { subject: name, section: '' };
+}
 
 window.renderScheduleTable = function () {
   const tbody = document.getElementById('schedule-tbody');
   if (!tbody) return;
-  const storedSchedule = JSON.parse(localStorage.getItem('gv_schedule') || '{}');
+
+  // Build grid: 9 rows × 3 cols
+  const grid = Array.from({ length: 9 }, () => ['', '', '']);
+
+  // Populate grid from classList
+  const allClasses = (typeof classList !== 'undefined') ? classList : [];
+  allClasses.forEach(cls => {
+    const parsed = parseSchedule(cls.schedule);
+    if (!parsed) return;
+    const { subject, section } = parseClassName(cls.name);
+    const room = cls.room || '';
+    const cell = `<strong>${escapeHTML(subject)}</strong><br>${escapeHTML(section)}<br><span style="opacity:0.7">${escapeHTML(room)}</span>`;
+    grid[parsed.row][parsed.col] = cell;
+  });
 
   let html = '';
-  SCHEDULE_TIMES.forEach((timeStr, rIdx) => {
-    html += `<tr><td class="schedule-time-col">${timeStr.replace(/\n/g, '<br>')}</td>`;
-    SCHEDULE_DAYS.forEach((dayStr, cIdx) => {
-      const cellId = `cell-${rIdx}-${cIdx}`;
-      const cellContent = storedSchedule[cellId] || '';
-      html += `
-        <td class="schedule-cell">
-          <div class="schedule-cell-content" contenteditable="true" data-cell-id="${cellId}" onblur="saveScheduleCell(this)">${cellContent}</div>
-        </td>`;
-    });
+  SCHEDULE_TIME_SLOTS.forEach((slot, rIdx) => {
+    html += `<tr>
+      <td class="schedule-time-col">${slot.label.replace(/\n/g, '<br>')}</td>`;
+    for (let c = 0; c < 3; c++) {
+      html += `<td class="schedule-cell"><div class="schedule-cell-content">${grid[rIdx][c]}</div></td>`;
+    }
     html += `</tr>`;
   });
 
   tbody.innerHTML = html;
 };
 
-window.saveScheduleCell = function (element) {
-  const cellId = element.getAttribute('data-cell-id');
-  const content = element.innerHTML;
-  const storedSchedule = JSON.parse(localStorage.getItem('gv_schedule') || '{}');
-  storedSchedule[cellId] = content;
-  localStorage.setItem('gv_schedule', JSON.stringify(storedSchedule));
-};
-
 window.printSchedule = function () {
   window.print();
 };
 
-// Initial render if schedule page is already active on load
+// Render on load if schedule page is active
 if (document.getElementById('page-schedule')?.classList.contains('active')) {
   window.renderScheduleTable();
 }
 
 }); // end window load
+

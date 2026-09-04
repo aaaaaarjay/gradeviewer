@@ -226,7 +226,7 @@ function renderClassTable() {
       ${reorderMode ? '<td class="class-reorder-handle" title="Drag to reorder">⠿</td>' : ''}
       <td>
         <div class="class-name-cell">${escapeHTML(cls.name)}</div>
-        ${cls.description ? `<div class="class-desc-cell">${escapeHTML(cls.description)}</div>` : ''}
+        ${cls.schedule ? `<div class="class-desc-cell">📅 ${escapeHTML(cls.schedule)}${cls.room ? ' • 🏢 ' + escapeHTML(cls.room) : ''}</div>` : ''}
         ${cls.classKey ? `<div class="class-key-display">🔐 Section code: <strong>${escapeHTML(cls.classKey)}</strong></div>` : '<div class="class-key-display missing">No section code</div>'}
       </td>
       <td class="class-url-cell">
@@ -324,29 +324,30 @@ function toggleAddForm() {
 }
 
 function clearAddForm() {
-  ['new-class-name','new-class-desc','new-class-url','new-class-key'].forEach(id => {
+  ['new-class-name','new-class-schedule','new-class-room','new-class-url','new-class-key'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('add-class-error').classList.add('hidden');
 }
 
 function addClassEntry() {
-  const name = (document.getElementById('new-class-name').value || '').trim();
-  const desc = (document.getElementById('new-class-desc').value || '').trim();
-  const url  = (document.getElementById('new-class-url').value || '').trim();
-  const key  = (document.getElementById('new-class-key').value || '').trim();
-  const errEl = document.getElementById('add-class-error');
+  const name     = (document.getElementById('new-class-name').value || '').trim();
+  const schedule = (document.getElementById('new-class-schedule').value || '').trim();
+  const room     = (document.getElementById('new-class-room').value || '').trim();
+  const url      = (document.getElementById('new-class-url').value || '').trim();
+  const key      = (document.getElementById('new-class-key').value || '').trim();
+  const errEl    = document.getElementById('add-class-error');
 
   if (!name) { errEl.textContent = 'Please enter a class name.'; errEl.classList.remove('hidden'); return; }
   if (!url)  { errEl.textContent = 'Please paste a Google Sheets link.'; errEl.classList.remove('hidden'); return; }
   if (!url.includes('/spreadsheets/d/')) {
     errEl.textContent = "That doesn't look like a valid Google Sheets link.";
-    errEl.classList.remove('hidden');
+    errEl.classList.hidden = false;
     return;
   }
   errEl.classList.add('hidden');
 
-  classList.push({ id: 'cls_' + Date.now(), name, description: desc, url, classKey: key });
+  classList.push({ id: 'cls_' + Date.now(), name, schedule, room, url, classKey: key });
   saveClassList().then(() => showToast('✅ Class added and synced!'));
   clearAddForm();
   renderClassTable();
@@ -375,10 +376,11 @@ function startEdit(id) {
   row.innerHTML = `
     <td colspan="3">
       <div class="edit-inputs">
-        <input class="form-input" id="edit-name" value="${escapeHTML(cls.name)}" placeholder="Class name" />
-        <input class="form-input" id="edit-desc" value="${escapeHTML(cls.description || '')}" placeholder="Description (optional)" />
-        <input class="form-input" id="edit-url"  value="${escapeHTML(cls.url || '')}"  placeholder="Google Sheets link" />
-        <input class="form-input" id="edit-key"  value="${escapeHTML(cls.classKey || '')}" placeholder="Section code (optional)" />
+        <input class="form-input" id="edit-name"     value="${escapeHTML(cls.name)}" placeholder="e.g. IT WST21 - Section 9" />
+        <input class="form-input" id="edit-schedule" value="${escapeHTML(cls.schedule || '')}" placeholder="Schedule e.g. MW 9:00-10:30 AM" />
+        <input class="form-input" id="edit-room"     value="${escapeHTML(cls.room || '')}" placeholder="Room e.g. CL4" />
+        <input class="form-input" id="edit-url"      value="${escapeHTML(cls.url || '')}"  placeholder="Google Sheets link" />
+        <input class="form-input" id="edit-key"      value="${escapeHTML(cls.classKey || '')}" placeholder="Section code (optional)" />
       </div>
     </td>
     <td>
@@ -396,10 +398,11 @@ function saveEdit(id) {
   const url  = (document.getElementById('edit-url').value || '').trim();
   if (!name || !url) { showToast('❌ Name and URL are required.'); return; }
 
-  cls.name        = name;
-  cls.description = (document.getElementById('edit-desc').value || '').trim();
-  cls.url         = url;
-  cls.classKey    = (document.getElementById('edit-key').value || '').trim();
+  cls.name     = name;
+  cls.schedule = (document.getElementById('edit-schedule').value || '').trim();
+  cls.room     = (document.getElementById('edit-room').value || '').trim();
+  cls.url      = url;
+  cls.classKey = (document.getElementById('edit-key').value || '').trim();
   editingId = null;
 
   saveClassList().then(() => showToast('✅ Class updated!'));

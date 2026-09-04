@@ -183,12 +183,16 @@
           <div class="panel-body" id="add-class-panel">
             <div class="add-form-grid">
               <div class="form-group full">
-                <label class="form-label">Class Name *</label>
-                <input type="text" id="new-class-name" class="form-input" placeholder="e.g. BSIT 1A — IT101" />
+                <label class="form-label">Class Name * <span style="color:var(--muted); font-weight:400;">(Subject Code — Section)</span></label>
+                <input type="text" id="new-class-name" class="form-input" placeholder="e.g. IT WST21 - Section 9" />
               </div>
-              <div class="form-group full">
-                <label class="form-label">Description</label>
-                <input type="text" id="new-class-desc" class="form-input" placeholder="e.g. Instructor: Juan dela Cruz" />
+              <div class="form-group">
+                <label class="form-label">Schedule * <span style="color:var(--muted); font-weight:400;">(Day + Time)</span></label>
+                <input type="text" id="new-class-schedule" class="form-input" placeholder="e.g. MW 9:00-10:30 AM" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Room</label>
+                <input type="text" id="new-class-room" class="form-input" placeholder="e.g. CL4" />
               </div>
               <div class="form-group full">
                 <label class="form-label">Google Sheets Link *</label>
