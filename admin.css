@@ -1199,6 +1199,127 @@ html, body {
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
 }
+
+/* ═══════════════════════════════════════════════
+   CLASS SCHEDULE & PRINTING
+   ═══════════════════════════════════════════════ */
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.schedule-table th {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  text-align: center;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  background: var(--surface2);
+}
+
+.schedule-time-col {
+  padding: 0.75rem 0.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  vertical-align: middle;
+}
+
+.schedule-cell {
+  border: 1px solid var(--border);
+  padding: 0;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.schedule-cell-content {
+  min-height: 80px;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  outline: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.schedule-cell-content:focus {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.print-only-header {
+  display: none;
+  font-size: 24px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+  font-family: 'Outfit', sans-serif;
+  color: #fff;
+}
+
+@media print {
+  /* Hide UI elements */
+  .sidebar, .admin-topbar, .page-header, .admin-toast {
+    display: none !important;
+  }
+  
+  .admin-main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .admin-page {
+    padding: 0 !important;
+  }
+  
+  .panel {
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Force background color for print */
+  @page { margin: 0.5cm; }
+  
+  body {
+    background: #4b5258 !important; /* Dark slate gray */
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #schedule-print-container {
+    padding: 2rem !important;
+    background: #4b5258 !important;
+    min-height: 100vh;
+  }
+
+  .print-only-header {
+    display: block !important;
+  }
+
+  .schedule-table th, .schedule-time-col, .schedule-cell {
+    border: 1px solid #ffffff !important;
+    color: #ffffff !important;
+    background: transparent !important;
+  }
+
+  .schedule-time-col {
+    font-size: 10pt !important;
+  }
+  
+  .schedule-cell-content {
+    font-size: 11pt !important;
+  }
+}
 /* Edit Mode styling */
 .group-card.edit-mode {
   border: 1px solid var(--accent);

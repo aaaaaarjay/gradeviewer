@@ -83,6 +83,10 @@
           <span class="nav-icon">📅</span> Attendance
         </button>
 
+        <button class="nav-item" id="nav-schedule" onclick="showPage('schedule')">
+          <span class="nav-icon">🗓️</span> Schedule
+        </button>
+
         <div class="nav-section-label">System</div>
 
         <button class="nav-item" id="nav-settings" onclick="showPage('settings')">
@@ -826,6 +830,36 @@
               </thead>
               <tbody id="attendance-tbody">
                 <tr><td colspan="3" style="text-align:center; color:var(--muted); padding:2rem;">Select a class to mark attendance.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SCHEDULE PAGE ── -->
+      <div class="admin-page" id="page-schedule">
+        <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="page-title">🗓️ Class Schedule</div>
+            <div class="page-sub">View and edit your weekly class schedule. Click any cell to type.</div>
+          </div>
+          <button class="btn btn-primary" onclick="printSchedule()">🖨️ Print Schedule</button>
+        </div>
+
+        <div class="panel" id="schedule-print-container">
+          <div class="print-only-header">CLASS SCHEDULE</div>
+          <div style="overflow-x:auto;">
+            <table class="schedule-table" id="schedule-table">
+              <thead>
+                <tr>
+                  <th style="width: 150px;">TIME</th>
+                  <th>MW</th>
+                  <th>TTH</th>
+                  <th>FS</th>
+                </tr>
+              </thead>
+              <tbody id="schedule-tbody">
+                <!-- rendered by JS -->
               </tbody>
             </table>
           </div>

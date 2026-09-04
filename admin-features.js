@@ -226,3 +226,75 @@ async function saveAttendance() {
     }
   }
 }
+
+/* ═══════════════════════════════════════════════
+   CLASS SCHEDULE LOGIC
+   ═══════════════════════════════════════════════ */
+
+const SCHEDULE_TIMES = [
+  "7:30 AM\nto\n9:00 AM",
+  "9:00 AM\nto\n10:30 AM",
+  "10:30 AM\nto\n12:00 PM",
+  "12:00 PM\nto\n1:30 PM",
+  "1:30 PM\nto\n3:00 PM",
+  "3:00 PM\nto\n4:30 PM",
+  "4:30 PM\nto\n6:00 PM",
+  "6:00 PM\nto\n7:30 PM",
+  "7:30 PM\nto\n9:00 PM"
+];
+
+const SCHEDULE_DAYS = ["MW", "TTH", "FS"];
+
+document.getElementById('nav-schedule').addEventListener('click', () => {
+  renderScheduleTable();
+});
+
+function renderScheduleTable() {
+  const tbody = document.getElementById('schedule-tbody');
+  const storedSchedule = JSON.parse(localStorage.getItem('gv_schedule') || '{}');
+  
+  let html = '';
+  SCHEDULE_TIMES.forEach((timeStr, rIdx) => {
+    html += `<tr>
+      <td class="schedule-time-col">${timeStr.replace(/\n/g, '<br>')}</td>`;
+    
+    SCHEDULE_DAYS.forEach((dayStr, cIdx) => {
+      const cellId = `cell-${rIdx}-${cIdx}`;
+      const cellContent = storedSchedule[cellId] || '';
+      html += `
+        <td class="schedule-cell">
+          <div class="schedule-cell-content" contenteditable="true" data-cell-id="${cellId}" onblur="saveScheduleCell(this)" oninput="markScheduleUnsaved(this)">${cellContent}</div>
+        </td>
+      `;
+    });
+    
+    html += `</tr>`;
+  });
+  
+  tbody.innerHTML = html;
+}
+
+function saveScheduleCell(element) {
+  const cellId = element.getAttribute('data-cell-id');
+  const content = element.innerHTML;
+  
+  const storedSchedule = JSON.parse(localStorage.getItem('gv_schedule') || '{}');
+  storedSchedule[cellId] = content;
+  localStorage.setItem('gv_schedule', JSON.stringify(storedSchedule));
+  
+  // Optional: Sync to Cloud if needed
+  if (typeof _db !== 'undefined' && _db) {
+    try {
+      const ref = window._firestoreDoc(_db, 'gradeviewer', 'schedule');
+      window._firestoreSetDoc(ref, { data: storedSchedule }, { merge: true });
+    } catch(e) {}
+  }
+}
+
+function markScheduleUnsaved(element) {
+  // Can be used to show a saving indicator if desired
+}
+
+function printSchedule() {
+  window.print();
+}
