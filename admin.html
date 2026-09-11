@@ -382,6 +382,16 @@
             <div class="panel-title">🎓 Teacher Mode</div>
           </div>
           <div class="panel-body">
+            <div class="toggle-row" style="background: var(--surface); border-radius: var(--radius); padding: 0.75rem 1rem; margin-bottom: 0.75rem; border: 1px solid rgba(108,99,255,0.3);">
+              <div>
+                <div class="toggle-label" style="display:flex; align-items:center; gap:0.5rem;">🌐 Grade Viewer Access <span id="viewer-access-status-badge" style="font-size:0.7rem; padding:2px 8px; border-radius:20px; background:var(--danger); color:white; font-weight:700;">LOCKED</span></div>
+                <div class="toggle-sub">Allow students to open the Grade Viewer and see their grades. Turn OFF to hide it until you're ready.</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="toggle-viewer-access" onchange="toggleViewerAccess(this.checked)" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
             <div class="toggle-row">
               <div>
                 <div class="toggle-label">🔓 Bypass Section Code</div>

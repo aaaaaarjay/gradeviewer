@@ -151,6 +151,18 @@ async function saveClassList() {
 function renderHomeScreen() {
   const grid = document.getElementById('class-grid');
   const empty = document.getElementById('home-empty');
+  const lockedScreen = document.getElementById('viewer-locked-screen');
+
+  // Check if teacher has locked the grade viewer
+  const viewerLocked = localStorage.getItem('gv_viewer_access') === '0';
+  if (viewerLocked) {
+    if (lockedScreen) lockedScreen.classList.remove('hidden');
+    grid.innerHTML = '';
+    if (empty) empty.classList.add('hidden');
+    return;
+  }
+  if (lockedScreen) lockedScreen.classList.add('hidden');
+
   if (!classList.length) {
     grid.innerHTML = '';
     empty.classList.remove('hidden');

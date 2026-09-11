@@ -198,7 +198,10 @@ function showPage(id) {
   document.getElementById('nav-' + id)?.classList.add('active');
   document.getElementById('topbar-title').textContent = PAGE_TITLES[id] || id;
   if (id === 'attendance' && typeof initAttendancePage === 'function') initAttendancePage();
-  if (id === 'settings' && typeof initGSheetsSettings === 'function') initGSheetsSettings();
+  if (id === 'settings') {
+    if (typeof initGSheetsSettings === 'function') initGSheetsSettings();
+    loadSettingsToggles();
+  }
   if (id === 'schedule' && typeof renderScheduleTable === 'function') renderScheduleTable();
 }
 
@@ -428,6 +431,35 @@ function toggleBypassStudentId(enabled) {
   bypassStudentId = enabled;
   sessionStorage.setItem('gv_bypass_studentid', enabled ? '1' : '0');
   showToast(enabled ? '🔓 Student ID bypassed' : '🔒 Student ID re-enabled');
+}
+
+function loadSettingsToggles() {
+  // Grade Viewer Access (persisted in localStorage so it survives page reload)
+  const viewerEnabled = localStorage.getItem('gv_viewer_access') !== '0'; // default ON
+  const viewerToggle = document.getElementById('toggle-viewer-access');
+  const badge = document.getElementById('viewer-access-status-badge');
+  if (viewerToggle) viewerToggle.checked = viewerEnabled;
+  if (badge) {
+    badge.textContent = viewerEnabled ? 'OPEN' : 'LOCKED';
+    badge.style.background = viewerEnabled ? 'var(--success)' : 'var(--danger)';
+  }
+  // Bypass toggles (session only)
+  const bypassSec = sessionStorage.getItem('gv_bypass_section') === '1';
+  const bypassId  = sessionStorage.getItem('gv_bypass_studentid') === '1';
+  const bypassSecEl = document.getElementById('toggle-bypass-section');
+  const bypassIdEl  = document.getElementById('toggle-bypass-studentid');
+  if (bypassSecEl) bypassSecEl.checked = bypassSec;
+  if (bypassIdEl)  bypassIdEl.checked  = bypassId;
+}
+
+function toggleViewerAccess(enabled) {
+  localStorage.setItem('gv_viewer_access', enabled ? '1' : '0');
+  const badge = document.getElementById('viewer-access-status-badge');
+  if (badge) {
+    badge.textContent = enabled ? 'OPEN' : 'LOCKED';
+    badge.style.background = enabled ? 'var(--success)' : 'var(--danger)';
+  }
+  showToast(enabled ? '🌐 Grade Viewer is now OPEN to students!' : '🔒 Grade Viewer is now LOCKED. Students cannot access it.');
 }
 
 function changePin() {
