@@ -1222,6 +1222,15 @@ function renderSavedGroupsPage(scoreData = {}) {
     const hasScore = saved && typeof saved === 'object'
       ? saved.groupScore !== '' || Object.values(saved.members || {}).some(value => String(value).trim() !== '')
       : String(saved ?? '').trim() !== '';
+    
+    // Build a readable list of which score columns were saved (Score 1, Score 2...)
+    let scoreColumnLabel = '';
+    if (hasScore && saved && typeof saved === 'object' && Array.isArray(saved.savedScoreColumns) && saved.savedScoreColumns.length) {
+      // savedScoreColumns stores the raw spreadsheet col index (2 = Score 1, 3 = Score 2...)
+      const colNames = saved.savedScoreColumns.map(c => `Score ${c - 1}`).join(', ');
+      scoreColumnLabel = ` in ${colNames}`;
+    }
+    
     return `
       <article class="saved-group-card">
         <div class="saved-group-card-header">
@@ -1231,6 +1240,7 @@ function renderSavedGroupsPage(scoreData = {}) {
           </div>
           <div class="saved-group-card-actions">
             <button class="btn btn-primary btn-sm" onclick="openSavedGroupScoreModal(${index})">⭐ Score</button>
+            ${hasScore ? `<button class="btn btn-warning btn-sm" onclick="deleteGroupScore(${index})" title="Clear saved score for this group">🗑 Del Score</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteSavedGroup(${index})">🗑 Delete</button>
           </div>
         </div>
@@ -1239,7 +1249,7 @@ function renderSavedGroupsPage(scoreData = {}) {
             ? group.students.map(student => `<span>${escapeHTML(student)}</span>`).join('')
             : '<span class="saved-group-no-members">No valid roster members</span>'}
         </div>
-        <div class="saved-group-status ${hasScore ? 'has-score' : ''}">${hasScore ? '✅ Score saved' : 'No score recorded yet'}</div>
+        <div class="saved-group-status ${hasScore ? 'has-score' : ''}">${hasScore ? `✅ Score saved${scoreColumnLabel}` : 'No score recorded yet'}</div>
       </article>`;
   }).join('');
 }
@@ -1399,6 +1409,34 @@ function storeSavedGroupScoreData(classId, period, category, data) {
   localStorage.setItem('gv_group_scores', JSON.stringify(all));
 }
 
+function deleteGroupScore(groupIndex) {
+  const group = savedGroupsPageGroups[groupIndex];
+  if (!group) return;
+  if (!confirm(`Delete the score for ${group.name}? This only clears the saved score — the group itself is kept.`)) return;
+  
+  const classId = document.getElementById('saved-groups-class-select').value;
+  const period = GROUP_SCORE_STORAGE_PERIOD;
+  const category = GROUP_SCORE_STORAGE_CATEGORY;
+  const scoreData = getSavedGroupScoreData(classId, period, category);
+  const groups = { ...(scoreData.groups || {}) };
+  delete groups[group.id];
+  storeSavedGroupScoreData(classId, period, category, { ...scoreData, groups });
+  renderSavedGroupsPage(getSavedGroupScoreData(classId, period, category));
+  showToast(`🗑 Score for ${group.name} cleared.`);
+}
+
+function deleteAllGroupScores() {
+  const classId = document.getElementById('saved-groups-class-select').value;
+  if (!classId) { showToast('Select a class first.'); return; }
+  if (!confirm('Delete ALL saved scores for all groups in this class? The groups themselves will remain.')) return;
+  
+  const period = GROUP_SCORE_STORAGE_PERIOD;
+  const category = GROUP_SCORE_STORAGE_CATEGORY;
+  storeSavedGroupScoreData(classId, period, category, { groups: {} });
+  renderSavedGroupsPage(getSavedGroupScoreData(classId, period, category));
+  showToast('🗑 All group scores cleared.');
+}
+
 let savedGroupScoreModalIndex = -1;
 let savedGroupScoreMode = 'group';
 
@@ -1501,12 +1539,20 @@ async function saveCurrentSavedGroupScore() {
 
   const scoreData = getSavedGroupScoreData(classId, period, category);
   const groups = { ...(scoreData.groups || {}) };
+  // Track which score columns have been used for this group
+  const existingEntry = groups[group.id];
+  const existingCols = Array.isArray(existingEntry?.savedScoreColumns) ? existingEntry.savedScoreColumns : [];
+  const updatedCols = existingCols.includes(groupSheetScoreColumn)
+    ? existingCols
+    : [...existingCols, groupSheetScoreColumn];
+  
   groups[group.id] = {
     mode: savedGroupScoreMode,
     groupScore: savedGroupScoreMode === 'group' ? groupScore : '',
     members,
     activity,
     max,
+    savedScoreColumns: updatedCols,
     savedAt: new Date().toISOString()
   };
   storeSavedGroupScoreData(classId, period, category, { activity, max, groups });

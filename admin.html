@@ -557,8 +557,9 @@
             <div class="page-title">👥 Saved Groups</div>
             <div class="page-sub">View saved groups and record one score for every group member.</div>
           </div>
-          <div style="display:flex; gap:0.5rem;">
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
             <button class="btn btn-primary" onclick="saveSavedGroupsOnline()">Save to Online</button>
+            <button class="btn btn-warning" onclick="deleteAllGroupScores()" title="Clear all saved scores without deleting groups">🗑 Delete All Scores</button>
             <button class="btn btn-danger" onclick="deleteAllSavedGroups()">🗑 Delete All Groups</button>
             <button class="btn btn-ghost" onclick="showPage('groups')">← Groups Manager</button>
             <button class="btn btn-ghost" onclick="toggleFullscreen('page-saved-groups')" title="Toggle Fullscreen">⛶</button>

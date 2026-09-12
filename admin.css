@@ -451,6 +451,8 @@ html, body {
 }
 .btn-ghost:hover { background: rgba(255,255,255,0.1); }
 .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+.btn-warning { background: rgba(251,146,60,0.15); color: #fb923c; border: 1px solid rgba(251,146,60,0.3); }
+.btn-warning:hover { background: rgba(251,146,60,0.25); }
 .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.78rem; }
 
 /* ─── CLASS TABLE ─── */
